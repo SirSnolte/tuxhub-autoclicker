@@ -89,12 +89,16 @@ pub fn serve() -> std::io::Result<()> {
                     }
                 } else if let Some(c) = clicker.as_mut() {
                     match action {
-                        "start" => Ok(c.start(&cfg, true)),
-                        "toggle" => Ok(c.toggle(&cfg, false)),
-                        "stop" => Ok(c.stop()),
-                        other => Err(format!("Unbekannte Aktion {other:?}")),
+                        "start" => c.start(&cfg, true),
+                        "toggle" => c.toggle(&cfg, false),
+                        "stop" => c.stop(),
+                        _ => {}
                     }
-                    .map(|()| json!(c.is_running()))
+                    if matches!(action, "start" | "toggle" | "stop") {
+                        Ok(json!(c.is_running()))
+                    } else {
+                        Err(format!("Unbekannte Aktion {action:?}"))
+                    }
                 } else {
                     Err(device_error.clone().unwrap_or_default())
                 }
