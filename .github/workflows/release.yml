@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Älteres Ubuntu = ältere glibc, damit die Binary auf möglichst vielen Distros läuft.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tests (ohne uinput)
+        run: cargo test --lib
+      - name: Bauen
+        run: cargo build --release
+      - name: Paketieren
+        run: |
+          name=tuxhub-autoclicker
+          mkdir -p dist/$name
+          cp target/release/$name tuxhub.toml README.md LICENSE dist/$name/
+          tar -C dist -czf $name-x86_64-linux.tar.gz $name
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" tuxhub-autoclicker-x86_64-linux.tar.gz --title "$GITHUB_REF_NAME" --generate-notes

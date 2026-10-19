@@ -1,0 +1,94 @@
+# tuxhub-Integration (Stufe 2). Siehe https://github.com/SirSnolte/tuxhub
+id = "autoclicker"
+name = "Autoclicker"
+version = "0.1.0"
+description = "Klickt automatisch für dich – funktioniert unter Wayland und X11 über ein virtuelles Eingabegerät (uinput)."
+icon = "🖱️"
+notice = "In Online-Spielen mit Anti-Cheat kann ein Autoclicker gegen die Nutzungsbedingungen verstoßen. Nutzung auf eigenes Risiko."
+
+[rpc]
+command = "tuxhub-autoclicker"
+args = ["--tuxhub"]
+
+[[settings]]
+key = "interval_ms"
+label = "Intervall"
+type = "number"
+default = 100
+min = 1
+max = 60000
+step = 1
+unit = "ms"
+help = "Zeit zwischen zwei Klicks."
+
+[[settings]]
+key = "jitter_pct"
+label = "Zufällige Abweichung"
+type = "number"
+default = 0
+min = 0
+max = 50
+step = 1
+unit = "%"
+help = "Variiert das Intervall zufällig um bis zu diesen Anteil."
+
+[[settings]]
+key = "button"
+label = "Maustaste"
+type = "select"
+default = "left"
+options = [
+  { value = "left", label = "Links" },
+  { value = "right", label = "Rechts" },
+  { value = "middle", label = "Mitte" },
+]
+
+[[settings]]
+key = "mode"
+label = "Modus"
+type = "select"
+default = "click"
+options = [
+  { value = "click", label = "Einzelklick" },
+  { value = "double", label = "Doppelklick" },
+  { value = "hold", label = "Gedrückt halten" },
+]
+
+[[settings]]
+key = "limit"
+label = "Anzahl Klicks"
+type = "number"
+default = 0
+min = 0
+max = 1000000
+step = 1
+help = "0 = unbegrenzt"
+
+[[settings]]
+key = "start_delay_s"
+label = "Startverzögerung"
+type = "number"
+default = 3
+min = 0
+max = 30
+step = 1
+unit = "s"
+help = "Gilt nur für „Start“ – Zeit, um ins Spielfenster zu wechseln. Der Hotkey startet sofort."
+
+[[actions]]
+id = "start"
+label = "Start"
+primary = true
+
+[[actions]]
+id = "stop"
+label = "Stopp"
+
+[[actions]]
+id = "toggle"
+label = "Start/Stopp sofort"
+shortcut = "F8"
+
+[[actions]]
+id = "setup"
+label = "uinput-Zugriff einrichten"
