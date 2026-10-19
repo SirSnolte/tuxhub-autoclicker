@@ -20,6 +20,9 @@ Eigenständig nutzbar oder bequem im [tuxhub](https://github.com/SirSnolte/tuxhu
   und Geschwindigkeit, im Editor Schritte und Wartezeiten bearbeiten, eigener
   Hotkey pro Makro
 - **F10** stoppt alles sofort; beim Stopp werden gedrückte Tasten losgelassen
+- Optionale eigene **Stopp-Taste** für den Klicker (z. B. `CTRL+q` oder `F7`),
+  direkt in der Oberfläche festlegbar. Tasten, die man zum Tippen braucht,
+  gehen nur mit Strg/Alt/Super – sonst würden sie systemweit abgefangen.
 
 ## Kommandozeile
 

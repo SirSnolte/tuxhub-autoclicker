@@ -57,6 +57,7 @@
       .grid2 label { display: grid; gap: 3px; font-size: 13px; }
       .hidden { display: none !important; }
       .err { color: var(--danger); }
+      .capturing { outline: 2px solid var(--accent); outline-offset: 1px; }
     </style>
   </head>
   <body>
@@ -70,10 +71,20 @@
       <div class="row">
         <button class="primary" data-action="start">Start</button>
         <button data-action="stop">Stopp</button>
-        <span class="muted">Hotkey <kbd>F8</kbd> startet/stoppt sofort, <kbd>F10</kbd> stoppt alles.</span>
+        <span class="muted">Hotkey <kbd>F8</kbd> startet/stoppt sofort, <kbd>F10</kbd> stoppt alles. Eigene Stopp-Taste: siehe unten.</span>
       </div>
       <p class="status" id="clicker-status"></p>
       <div class="form" id="clicker-form"></div>
+      <div class="form">
+        <div class="field">
+          <span>Stopp-Taste (optional)<small class="muted">Eigener Hotkey, der nur den Klicker stoppt – zusätzlich zu F8/F10.</small></span>
+          <span class="row">
+            <kbd id="stop-key">keine</kbd>
+            <button class="small" id="stop-set">Taste festlegen</button>
+            <button class="small danger" id="stop-clear">Entfernen</button>
+          </span>
+        </div>
+      </div>
       <p class="muted" style="margin-top: 14px">
         Funktioniert nichts? <button class="small" data-action="setup">uinput-Zugriff einrichten</button>
       </p>
@@ -114,7 +125,9 @@
           <label>Name <input id="ed-name" /></label>
           <label>Wiederholungen (0 = endlos) <input id="ed-repeat" type="number" min="0" max="100000" /></label>
           <label>Geschwindigkeit <input id="ed-speed" type="number" min="0.1" max="10" step="0.1" /></label>
-          <label>Hotkey (z. B. CTRL+F1) <input id="ed-shortcut" placeholder="keiner" /></label>
+          <label>Hotkey (z. B. CTRL+F1)
+            <span class="row"><input id="ed-shortcut" placeholder="keiner" style="flex:1" /><button class="small" id="ed-capture">Festlegen</button></span>
+          </label>
         </div>
         <div class="row" style="margin-bottom: 8px">
           <span class="muted">Schritt hinzufügen:</span>
@@ -211,7 +224,74 @@
         form.append(rm);
       }
       tuxhub.on("status", (s) => ($("clicker-status").textContent = s.text ?? ""));
-      tuxhub.getSettings().then((s) => { settings = s; renderForm(); }).catch(fail);
+      tuxhub.getSettings().then((s) => { settings = s; renderForm(); showStop(); }).catch(fail);
+
+      // --------------------------------------------------- Taste festlegen
+      // Wandelt einen Tastendruck in das XDG-Hotkey-Format um (CTRL+SHIFT+q, F7, …).
+      const NAMED = {
+        Pause: "Pause", ScrollLock: "Scroll_Lock", Insert: "Insert", Home: "Home", End: "End",
+        PageUp: "Page_Up", PageDown: "Page_Down", Delete: "Delete", Escape: "Escape", " ": "space",
+        Enter: "Return", Tab: "Tab", Backspace: "BackSpace",
+      };
+      const STANDALONE = new Set(["Pause", "Scroll_Lock", "Insert", "Home", "End", "Page_Up", "Page_Down", "Delete"]);
+      function toTrigger(e) {
+        if (["Control", "Alt", "Shift", "Meta", "AltGraph", "OS"].includes(e.key)) return { wait: true };
+        let key = null;
+        if (/^F([1-9]|1\d|2[0-4])$/.test(e.key)) key = e.key;
+        else if (/^Key[A-Z]$/.test(e.code)) key = e.code.slice(3).toLowerCase();
+        else if (/^Digit\d$/.test(e.code)) key = e.code.slice(5);
+        else key = NAMED[e.key] ?? null;
+        if (!key) return { error: `Taste „${e.key}“ wird nicht unterstützt` };
+        const mods = [];
+        if (e.ctrlKey) mods.push("CTRL");
+        if (e.altKey) mods.push("ALT");
+        if (e.shiftKey) mods.push("SHIFT");
+        if (e.metaKey) mods.push("LOGO");
+        const strong = mods.some((m) => m !== "SHIFT");
+        if (!strong && !/^F\d+$/.test(key) && !STANDALONE.has(key)) {
+          return { error: "Diese Taste braucht man zum Tippen/Spielen – bitte mit Strg, Alt oder Super kombinieren." };
+        }
+        return { trigger: [...mods, key].join("+") };
+      }
+      /** Wartet auf den nächsten Tastendruck. Escape bricht ab. */
+      function captureKey(button) {
+        return new Promise((resolve) => {
+          const old = button.textContent;
+          button.textContent = "Taste drücken … (Esc = Abbruch)";
+          button.classList.add("capturing");
+          const done = (val) => {
+            window.removeEventListener("keydown", onKey, true);
+            button.textContent = old;
+            button.classList.remove("capturing");
+            resolve(val);
+          };
+          const onKey = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === "Escape" && !e.ctrlKey && !e.altKey && !e.metaKey) return done(null);
+            const r = toTrigger(e);
+            if (r.wait) return;
+            if (r.error) { alert(r.error); return done(null); }
+            done(r.trigger);
+          };
+          window.addEventListener("keydown", onKey, true);
+          window.focus();
+        });
+      }
+
+      const showStop = () => ($("stop-key").textContent = settings.stop_shortcut || "keine");
+      $("stop-set").onclick = async () => {
+        const t = await captureKey($("stop-set"));
+        if (!t) return;
+        settings.stop_shortcut = t;
+        showStop();
+        tuxhub.saveSettings({ ...settings }).catch(fail);
+      };
+      $("stop-clear").onclick = () => {
+        settings.stop_shortcut = "";
+        showStop();
+        tuxhub.saveSettings({ ...settings }).catch(fail);
+      };
 
       // ------------------------------------------------------------ Makros
       let macros = [];
@@ -358,6 +438,10 @@
         if (!f || f <= 0) return;
         draft.steps.forEach((s) => (s.delay_ms = Math.round(s.delay_ms * f)));
         renderSteps();
+      };
+      $("ed-capture").onclick = async () => {
+        const t = await captureKey($("ed-capture"));
+        if (t) $("ed-shortcut").value = t;
       };
       $("ed-cancel").onclick = closeEditor;
       $("ed-save").onclick = async () => {

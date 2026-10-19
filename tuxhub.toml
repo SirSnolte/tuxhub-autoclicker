@@ -1,7 +1,7 @@
 # tuxhub-Integration (Stufe 2). Siehe https://github.com/SirSnolte/tuxhub
 id = "autoclicker"
 name = "Autoclicker"
-version = "0.2.0"
+version = "0.2.1"
 description = "Klickt automatisch und spielt aufgenommene Makros ab – unter Wayland und X11 über ein virtuelles Eingabegerät (uinput)."
 icon = "🖱️"
 notice = "In Online-Spielen mit Anti-Cheat kann ein Autoclicker gegen die Nutzungsbedingungen verstoßen. Nutzung auf eigenes Risiko."
@@ -76,6 +76,13 @@ max = 30
 step = 1
 unit = "s"
 help = "Gilt nur für „Start“ – Zeit, um ins Spielfenster zu wechseln. Der Hotkey startet sofort."
+
+[[settings]]
+key = "stop_shortcut"
+label = "Stopp-Taste (optional)"
+type = "text"
+default = ""
+help = "Eigener globaler Hotkey, der nur den Klicker stoppt, z. B. CTRL+q oder F7."
 
 [[actions]]
 id = "start"

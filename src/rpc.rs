@@ -26,11 +26,16 @@ type Send = Arc<dyn Fn(Value) + std::marker::Send + Sync>;
 #[serde(default)]
 struct MacroSettings {
     record_moves: bool,
+    /// Optionale, frei gewählte Stopp-Taste für den Klicker (leer = keine)
+    stop_shortcut: String,
 }
 
 impl Default for MacroSettings {
     fn default() -> Self {
-        Self { record_moves: true }
+        Self {
+            record_moves: true,
+            stop_shortcut: String::new(),
+        }
     }
 }
 
@@ -148,14 +153,18 @@ impl State {
 
     /// Meldet dem Hub die Hotkeys aller Makros.
     fn send_shortcuts(&self) {
-        let list: Vec<Value> = self
-            .store
+        let stop = self.macro_cfg.stop_shortcut.trim();
+        let stop = (!stop.is_empty() && macros::safe_trigger(stop))
+            .then(|| json!({ "id": "stop", "label": "Klicker stoppen", "shortcut": stop }));
+        let list: Vec<Value> = stop
+            .into_iter()
+            .chain(self.store
             .list()
             .into_iter()
             .filter_map(|m| {
                 let s = m.shortcut?;
                 Some(json!({ "id": format!("macro:{}", m.id), "label": format!("Makro: {}", m.name), "shortcut": s }))
-            })
+            }))
             .collect();
         (self.send)(json!({ "method": "shortcuts", "params": list }));
     }
@@ -236,7 +245,15 @@ impl State {
         match method {
             "configure" => {
                 self.cfg = serde_json::from_value(params.clone()).map_err(|e| format!("Ungültige Einstellungen: {e}"))?;
-                self.macro_cfg = serde_json::from_value(params).unwrap_or_default();
+                let new: MacroSettings = serde_json::from_value(params).unwrap_or_default();
+                if !new.stop_shortcut.trim().is_empty() && !macros::safe_trigger(new.stop_shortcut.trim()) {
+                    return Err(format!("Stopp-Taste {:?} ist nicht erlaubt", new.stop_shortcut));
+                }
+                let changed = new.stop_shortcut != self.macro_cfg.stop_shortcut;
+                self.macro_cfg = new;
+                if changed {
+                    self.send_shortcuts();
+                }
                 Ok(json!(true))
             }
             "status" => Ok(json!(*self.last_status.lock().unwrap())),

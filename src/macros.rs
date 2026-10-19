@@ -80,6 +80,17 @@ impl Macro {
                 ));
             }
         }
+        if let Some(s) = self
+            .shortcut
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            && !safe_trigger(s)
+        {
+            return Err(format!(
+                "Hotkey {s:?} ist nicht erlaubt – Buchstaben/Zahlen nur mit Strg, Alt oder Super (z. B. CTRL+F1)"
+            ));
+        }
         self.shortcut = self
             .shortcut
             .take()
@@ -110,6 +121,45 @@ pub fn all_keys() -> Vec<(u16, String)> {
         .map(|c| (c, key_name(c)))
         .filter(|(_, n)| !n.starts_with('#'))
         .collect()
+}
+
+/// Prüft einen Hotkey im XDG-Format (`CTRL+SHIFT+q`, `F7`, …).
+///
+/// Tasten, die man zum Tippen oder Spielen braucht (Buchstaben, Zahlen,
+/// Leertaste, Escape, Enter, …), sind nur mit Strg/Alt/Logo erlaubt – sonst
+/// würden sie systemweit abgefangen.
+pub fn safe_trigger(t: &str) -> bool {
+    if t.is_empty()
+        || t.len() > 64
+        || !t
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '+')
+    {
+        return false;
+    }
+    let parts: Vec<&str> = t.split('+').collect();
+    let (key, mods) = parts.split_last().unwrap();
+    if key.is_empty()
+        || mods
+            .iter()
+            .any(|m| !matches!(*m, "CTRL" | "ALT" | "SHIFT" | "LOGO"))
+    {
+        return false;
+    }
+    let standalone = (key.starts_with('F')
+        && key[1..].parse::<u8>().is_ok_and(|n| (1..=24).contains(&n)))
+        || matches!(
+            *key,
+            "Pause"
+                | "Scroll_Lock"
+                | "Insert"
+                | "Home"
+                | "End"
+                | "Page_Up"
+                | "Page_Down"
+                | "Delete"
+        );
+    standalone || mods.iter().any(|m| matches!(*m, "CTRL" | "ALT" | "LOGO"))
 }
 
 pub fn valid_id(id: &str) -> bool {
@@ -475,6 +525,37 @@ mod tests {
         assert!(store.load("../etc").is_err());
         store.delete(&id).unwrap();
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn triggers() {
+        for ok in [
+            "F7",
+            "F24",
+            "CTRL+q",
+            "CTRL+SHIFT+F1",
+            "ALT+1",
+            "LOGO+space",
+            "Pause",
+            "SHIFT+F9",
+        ] {
+            assert!(safe_trigger(ok), "{ok}");
+        }
+        for bad in [
+            "q",
+            "SHIFT+q",
+            "space",
+            "Escape",
+            "1",
+            "",
+            "F25",
+            "CTRL+",
+            "HYPER+a",
+            "CTRL+a;rm",
+            "Return",
+        ] {
+            assert!(!safe_trigger(bad), "{bad}");
+        }
     }
 
     #[test]
