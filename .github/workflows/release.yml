@@ -22,7 +22,7 @@ jobs:
         run: |
           name=tuxhub-autoclicker
           mkdir -p dist/$name
-          cp target/release/$name tuxhub.toml README.md LICENSE dist/$name/
+          cp -r target/release/$name tuxhub.toml ui README.md LICENSE dist/$name/
           tar -C dist -czf $name-x86_64-linux.tar.gz $name
       - name: Release anlegen
         env:

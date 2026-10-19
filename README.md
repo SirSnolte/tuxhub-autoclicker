@@ -16,14 +16,26 @@ Eigenständig nutzbar oder bequem im [tuxhub](https://github.com/SirSnolte/tuxhu
 - Einzelklick, Doppelklick oder Gedrückthalten
 - Intervall ab 1 ms, zufällige Abweichung (Jitter)
 - Klick-Limit und Startverzögerung
+- **Makros:** Tastatur und Maus aufnehmen (F9), abspielen mit Wiederholungen
+  und Geschwindigkeit, im Editor Schritte und Wartezeiten bearbeiten, eigener
+  Hotkey pro Makro
+- **F10** stoppt alles sofort; beim Stopp werden gedrückte Tasten losgelassen
 
 ## Kommandozeile
 
 ```bash
 tuxhub-autoclicker click --interval 100 --button left --delay 3
 tuxhub-autoclicker click -i 50 -m double -n 200
+tuxhub-autoclicker record "Erz farmen"     # Strg+C beendet die Aufnahme
+tuxhub-autoclicker play "Erz farmen" -r 10 -s 1.5
+tuxhub-autoclicker macros
 tuxhub-autoclicker setup
 ```
+
+Makros liegen als JSON in `~/.local/share/tuxhub-autoclicker/macros/`.
+Zum Aufnehmen braucht dein Nutzer Lesezugriff auf `/dev/input` (Gruppe
+`input`). Gelesen wird nur während einer Aufnahme – trotzdem keine Passwörter
+eintippen, solange sie läuft.
 
 `Strg+C` stoppt sofort. `setup` richtet einmalig eine udev-Regel ein, damit
 der angemeldete Nutzer `/dev/uinput` verwenden darf (fragt nach dem Passwort).
@@ -33,7 +45,7 @@ Wer Steam installiert hat, hat diesen Zugriff meist schon.
 
 ```bash
 cargo build --release
-cargo test        # die uinput-Tests belegen das virtuelle Gerät exklusiv – es kommen keine echten Klicks an
+cargo test -- --test-threads=1   # Geräte-Tests: Wiedergabe exklusiv gegrabbt, Aufnahme nur über F24 eines Testgeräts
 ```
 
 ## Lizenz

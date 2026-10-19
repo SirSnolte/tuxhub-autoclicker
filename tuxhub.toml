@@ -1,10 +1,12 @@
 # tuxhub-Integration (Stufe 2). Siehe https://github.com/SirSnolte/tuxhub
 id = "autoclicker"
 name = "Autoclicker"
-version = "0.1.0"
-description = "Klickt automatisch für dich – funktioniert unter Wayland und X11 über ein virtuelles Eingabegerät (uinput)."
+version = "0.2.0"
+description = "Klickt automatisch und spielt aufgenommene Makros ab – unter Wayland und X11 über ein virtuelles Eingabegerät (uinput)."
 icon = "🖱️"
 notice = "In Online-Spielen mit Anti-Cheat kann ein Autoclicker gegen die Nutzungsbedingungen verstoßen. Nutzung auf eigenes Risiko."
+
+ui = "ui/index.html"
 
 [rpc]
 command = "tuxhub-autoclicker"
@@ -88,6 +90,22 @@ label = "Stopp"
 id = "toggle"
 label = "Start/Stopp sofort"
 shortcut = "F8"
+
+[[settings]]
+key = "record_moves"
+label = "Mausbewegungen aufnehmen"
+type = "toggle"
+default = true
+
+[[actions]]
+id = "record"
+label = "Makro-Aufnahme Start/Stopp"
+shortcut = "F9"
+
+[[actions]]
+id = "panic"
+label = "Alles stoppen"
+shortcut = "F10"
 
 [[actions]]
 id = "setup"
