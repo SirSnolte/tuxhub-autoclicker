@@ -12,7 +12,7 @@ jobs:
     # Älteres Ubuntu = ältere glibc, damit die Binary auf möglichst vielen Distros läuft.
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - name: Tests (ohne uinput)
         run: cargo test --lib
