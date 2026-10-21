@@ -9,22 +9,38 @@ permissions:
 
 jobs:
   release:
-    # Älteres Ubuntu = ältere glibc, damit die Binary auf möglichst vielen Distros läuft.
+    # An older Ubuntu release keeps the binary compatible with older glibc versions.
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
+
       - uses: dtolnay/rust-toolchain@stable
-      - name: Tests (ohne uinput)
-        run: cargo test --lib
-      - name: Bauen
-        run: cargo build --release
-      - name: Paketieren
+
+      - name: Verify that the tag matches the crate version
         run: |
-          name=tuxhub-autoclicker
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME does not match version $version"; exit 1; }
+
+      - name: Test
+        run: cargo test --lib
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Package
+        run: |
+          name=tuxly-autoclicker
           mkdir -p dist/$name
-          cp -r target/release/$name tuxhub.toml ui README.md LICENSE dist/$name/
+          cp -r target/release/$name tuxly.toml ui README.md LICENSE dist/$name/
           tar -C dist -czf $name-x86_64-linux.tar.gz $name
-      - name: Release anlegen
+          sha256sum $name-x86_64-linux.tar.gz > $name-x86_64-linux.tar.gz.sha256
+
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" tuxhub-autoclicker-x86_64-linux.tar.gz --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            tuxly-autoclicker-x86_64-linux.tar.gz \
+            tuxly-autoclicker-x86_64-linux.tar.gz.sha256 \
+            --title "tuxly-autoclicker $GITHUB_REF_NAME" \
+            --notes-file <(awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## \\[" v "\\]" {found=1; next} found && /^## \[/ {exit} found && !/^\[[^]]*\]: /' CHANGELOG.md)

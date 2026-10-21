@@ -1,16 +1,17 @@
-//! tuxhub-Modus: JSON-RPC über stdin/stdout, eine Nachricht pro Zeile.
+//! tuxly mode: JSON-RPC over standard input and output, one message per line.
 //!
-//! Methoden:
+//! Methods:
 //! - `configure`, `status`, `shutdown`
-//! - `action` mit `id`: `start`, `stop`, `toggle`, `setup`, `record`
-//!   (Aufnahme an/aus), `panic` (alles stoppen), `macro:<id>` (abspielen/stoppen)
+//! - `action` with `id`: `start`, `stop`, `toggle`, `setup`, `record`
+//!   (start or stop recording), `panic` (stop everything), `macro:<id>`
+//!   (play or stop a macro)
 //! - `macros.list`, `macros.get`, `macros.save`, `macros.delete`,
 //!   `macros.play`, `macros.stop`, `record.start`, `record.stop`, `keys`
 //!
-//! Benachrichtigungen an den Hub: `status` (Autoclicker), `macro-status`,
-//! `macros-changed` und `shortcuts` (Hotkeys der Makros).
+//! Notifications sent to tuxly: `status` (clicker), `macro-status`,
+//! `macros-changed` and `shortcuts` (runtime hotkeys).
 
-use crate::clicker::{Clicker, Config, Status};
+use crate::clicker::{Clicker, Config, Phase, Status};
 use crate::device::{Mouse, setup_access};
 use crate::macros::{self, Macro, Store};
 use crate::player::{Keyboard, PlayStatus, Player};
@@ -26,7 +27,7 @@ type Send = Arc<dyn Fn(Value) + std::marker::Send + Sync>;
 #[serde(default)]
 struct MacroSettings {
     record_moves: bool,
-    /// Optionale, frei gewählte Stopp-Taste für den Klicker (leer = keine)
+    /// Optional hotkey that stops the clicker (empty = none).
     stop_shortcut: String,
 }
 
@@ -59,11 +60,6 @@ pub fn serve() -> std::io::Result<()> {
         let _ = o.flush();
     });
 
-    let last_status = Arc::new(Mutex::new(Status {
-        running: false,
-        clicks: 0,
-        text: "Bereit".into(),
-    }));
     let mut st = State {
         send: send.clone(),
         cfg: Config::default(),
@@ -73,15 +69,14 @@ pub fn serve() -> std::io::Result<()> {
         recorder: None,
         device_error: None,
         store: Store::open()?,
-        last_status,
+        last_status: Arc::new(Mutex::new(Status::new(Phase::Ready, 0, 0, None))),
     };
-    // Geräte gleich anlegen: libinput braucht einen Moment, bis es neue Geräte
-    // erkennt – so geht der erste Klick nicht verloren.
+    // Create the devices right away: libinput needs a moment to pick up new
+    // devices, and this way the first click is not lost.
     st.create_devices();
-    st.clicker_status(Status {
-        running: false,
-        clicks: 0,
-        text: st.device_error.clone().unwrap_or_else(|| "Bereit".into()),
+    st.clicker_status(match &st.device_error {
+        Some(e) => Status::new(Phase::Error, 0, 0, Some(e.clone())),
+        None => Status::new(Phase::Ready, 0, 0, None),
     });
     st.send_shortcuts();
 
@@ -107,7 +102,7 @@ pub fn serve() -> std::io::Result<()> {
             });
         }
     }
-    // stdin zu (Hub beendet) → alles sofort stoppen.
+    // Standard input closed (tuxly exited): stop everything immediately.
     st.panic();
     Ok(())
 }
@@ -125,9 +120,9 @@ impl State {
         let on_play = {
             let send = self.send.clone();
             Arc::new(move |s: &PlayStatus| {
-                send(json!({ "method": "macro-status", "params": {
-                    "recording": false, "playing": s.playing, "round": s.round, "text": s.text
-                }}));
+                let mut params = json!(s);
+                params["recording"] = json!(false);
+                send(json!({ "method": "macro-status", "params": params }));
             })
         };
         match Mouse::new().and_then(|m| Ok((m, Keyboard::new()?))) {
@@ -145,25 +140,36 @@ impl State {
         (self.send)(json!({ "method": "status", "params": s }));
     }
 
-    fn macro_status(&self, recording: bool, text: impl Into<String>) {
+    /// Recording state for the interface. `phase` is `recording`, `saved`,
+    /// `empty` or `discarded`; `text` is an English fallback.
+    fn macro_status(&self, phase: &str, devices: usize, saved: Option<&Macro>) {
+        let text = match (phase, saved) {
+            ("recording", _) => format!("Recording from {devices} devices"),
+            ("saved", Some(m)) => format!("\"{}\" saved with {} steps", m.name, m.steps.len()),
+            ("empty", _) => "Nothing was recorded".to_string(),
+            _ => "Recording discarded".to_string(),
+        };
         (self.send)(json!({ "method": "macro-status", "params": {
-            "recording": recording, "playing": null, "text": text.into()
+            "recording": phase == "recording",
+            "playing": null,
+            "phase": phase,
+            "devices": devices,
+            "name": saved.map(|m| m.name.clone()),
+            "steps": saved.map(|m| m.steps.len()),
+            "text": text,
         }}));
     }
 
-    /// Meldet dem Hub die Hotkeys aller Makros.
+    /// Reports the runtime hotkeys (stop key and macro hotkeys) to tuxly.
     fn send_shortcuts(&self) {
         let stop = self.macro_cfg.stop_shortcut.trim();
         let stop = (!stop.is_empty() && macros::safe_trigger(stop))
-            .then(|| json!({ "id": "stop", "label": "Klicker stoppen", "shortcut": stop }));
+            .then(|| json!({ "id": "stop", "label": "Stop clicking", "shortcut": stop }));
         let list: Vec<Value> = stop
             .into_iter()
-            .chain(self.store
-            .list()
-            .into_iter()
-            .filter_map(|m| {
+            .chain(self.store.list().into_iter().filter_map(|m| {
                 let s = m.shortcut?;
-                Some(json!({ "id": format!("macro:{}", m.id), "label": format!("Makro: {}", m.name), "shortcut": s }))
+                Some(json!({ "id": format!("macro:{}", m.id), "label": format!("Macro: {}", m.name), "shortcut": s }))
             }))
             .collect();
         (self.send)(json!({ "method": "shortcuts", "params": list }));
@@ -177,7 +183,7 @@ impl State {
     fn device_err(&self) -> String {
         self.device_error
             .clone()
-            .unwrap_or_else(|| "Gerät nicht verfügbar".into())
+            .unwrap_or_else(|| "the input device is not available".into())
     }
 
     fn panic(&mut self) {
@@ -189,31 +195,31 @@ impl State {
         }
         if let Some(r) = self.recorder.take() {
             drop(r.finish());
-            self.macro_status(false, "Aufnahme verworfen");
+            self.macro_status("discarded", 0, None);
         }
     }
 
     fn record_start(&mut self) -> Result<Value, String> {
         if self.recorder.is_some() {
-            return Err("Aufnahme läuft schon".into());
+            return Err("a recording is already running".into());
         }
         let rec = Recorder::start(self.macro_cfg.record_moves).map_err(|e| e.to_string())?;
         let n = rec.devices.len();
         self.recorder = Some(rec);
-        self.macro_status(true, format!("Nimmt auf ({n} Geräte) …"));
+        self.macro_status("recording", n, None);
         Ok(json!(true))
     }
 
     fn record_stop(&mut self, name: Option<String>) -> Result<Value, String> {
-        let rec = self.recorder.take().ok_or("Keine Aufnahme aktiv")?;
+        let rec = self.recorder.take().ok_or("no recording is running")?;
         let steps = macros::to_steps(&rec.finish());
         if steps.is_empty() {
-            self.macro_status(false, "Nichts aufgenommen");
-            return Err("Nichts aufgenommen".into());
+            self.macro_status("empty", 0, None);
+            return Err("nothing was recorded".into());
         }
         let name = name
             .filter(|n| !n.trim().is_empty())
-            .unwrap_or_else(|| format!("Aufnahme {}", self.store.list().len() + 1));
+            .unwrap_or_else(|| format!("Recording {}", self.store.list().len() + 1));
         let m = self.store.save(Macro {
             id: self.store.new_id(&name),
             name,
@@ -222,10 +228,7 @@ impl State {
             speed: 1.0,
             shortcut: None,
         })?;
-        self.macro_status(
-            false,
-            format!("„{}“ gespeichert – {} Schritte", m.name, m.steps.len()),
-        );
+        self.macro_status("saved", 0, Some(&m));
         self.macros_changed();
         Ok(json!(m))
     }
@@ -244,10 +247,10 @@ impl State {
         let str_param = |key: &str| params.get(key).and_then(Value::as_str).map(str::to_owned);
         match method {
             "configure" => {
-                self.cfg = serde_json::from_value(params.clone()).map_err(|e| format!("Ungültige Einstellungen: {e}"))?;
+                self.cfg = serde_json::from_value(params.clone()).map_err(|e| format!("invalid settings: {e}"))?;
                 let new: MacroSettings = serde_json::from_value(params).unwrap_or_default();
                 if !new.stop_shortcut.trim().is_empty() && !macros::safe_trigger(new.stop_shortcut.trim()) {
-                    return Err(format!("Stopp-Taste {:?} ist nicht erlaubt", new.stop_shortcut));
+                    return Err(format!("the stop hotkey {:?} is not allowed", new.stop_shortcut));
                 }
                 let changed = new.stop_shortcut != self.macro_cfg.stop_shortcut;
                 self.macro_cfg = new;
@@ -274,7 +277,7 @@ impl State {
             )),
             "macros.get" => Ok(json!(self.store.load(&str_param("id").unwrap_or_default())?)),
             "macros.save" => {
-                let mut m: Macro = serde_json::from_value(params).map_err(|e| format!("Ungültiges Makro: {e}"))?;
+                let mut m: Macro = serde_json::from_value(params).map_err(|e| format!("invalid macro: {e}"))?;
                 if m.id.is_empty() {
                     m.id = self.store.new_id(&m.name);
                 }
@@ -296,13 +299,13 @@ impl State {
             }
             "record.start" => self.record_start(),
             "record.stop" => self.record_stop(str_param("name")),
-            other => Err(format!("Unbekannte Methode {other:?}")),
+            other => Err(format!("unknown method {other:?}")),
         }
     }
 
     fn action(&mut self, action: &str) -> Result<Value, String> {
         if let Some(id) = action.strip_prefix("macro:") {
-            // Hotkey eines Makros: abspielen, oder stoppen, wenn es gerade läuft.
+            // Macro hotkey: play the macro, or stop playback if one is running.
             if self.player.as_ref().is_some_and(Player::is_playing) {
                 self.player.as_mut().unwrap().stop();
                 return Ok(json!(false));
@@ -316,11 +319,7 @@ impl State {
                 if let Some(e) = &self.device_error {
                     return Err(e.clone());
                 }
-                self.clicker_status(Status {
-                    running: false,
-                    clicks: 0,
-                    text: "Zugriff eingerichtet – bereit".into(),
-                });
+                self.clicker_status(Status::new(Phase::Ready, 0, 0, None));
                 Ok(json!(true))
             }
             "record" => {
@@ -344,7 +343,7 @@ impl State {
                 }
                 Ok(json!(c.is_running()))
             }
-            other => Err(format!("Unbekannte Aktion {other:?}")),
+            other => Err(format!("unknown action {other:?}")),
         }
     }
 }

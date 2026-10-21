@@ -1,75 +1,75 @@
 use clap::{Parser, Subcommand};
 use std::sync::{Arc, Mutex};
-use tuxhub_autoclicker::clicker::{Clicker, Config, Mode, Status};
-use tuxhub_autoclicker::device::{Button, Mouse, UDEV_RULE_PATH, setup_access};
-use tuxhub_autoclicker::macros::{self, Macro, Store};
-use tuxhub_autoclicker::player::{Keyboard, PlayStatus, Player};
-use tuxhub_autoclicker::recorder::Recorder;
+use tuxly_autoclicker::clicker::{Clicker, Config, Mode, Status};
+use tuxly_autoclicker::device::{Button, Mouse, UDEV_RULE_PATH, setup_access};
+use tuxly_autoclicker::macros::{self, Macro, Store};
+use tuxly_autoclicker::player::{Keyboard, PlayStatus, Player};
+use tuxly_autoclicker::recorder::Recorder;
 
-/// Autoclicker für Linux – funktioniert unter Wayland und X11.
+/// Autoclicker and input macros for Linux. Works on Wayland and X11.
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-    /// Hub-Modus: JSON-RPC über stdin/stdout (wird von tuxhub genutzt)
+    /// tuxly mode: JSON-RPC over standard input and output (used by tuxly)
     #[arg(long, hide = true)]
-    tuxhub: bool,
+    tuxly: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// Klicken, bis Strg+C gedrückt wird oder das Limit erreicht ist
+    /// Click until Ctrl+C is pressed or the limit is reached
     Click {
-        /// Zeit zwischen zwei Klicks in Millisekunden
+        /// Time between two clicks in milliseconds
         #[arg(short, long, default_value_t = 100)]
         interval: u64,
         #[arg(short, long, value_enum, default_value_t = Button::Left)]
         button: Button,
         #[arg(short, long, value_enum, default_value_t = Mode::Click)]
         mode: Mode,
-        /// Anzahl Klicks, 0 = unbegrenzt
+        /// Number of clicks, 0 = unlimited
         #[arg(short = 'n', long, default_value_t = 0)]
         count: u64,
-        /// Zufällige Abweichung des Intervalls in Prozent
+        /// Random variation of the interval in percent
         #[arg(short, long, default_value_t = 0)]
         jitter: u32,
-        /// Sekunden bis zum Start
+        /// Seconds before starting
         #[arg(short, long, default_value_t = 3)]
         delay: u64,
     },
-    /// Makro aufnehmen, bis Strg+C gedrückt wird
+    /// Record a macro until Ctrl+C is pressed
     Record {
-        /// Name des Makros
+        /// Name of the macro
         name: String,
-        /// Mausbewegungen nicht aufnehmen (nur Tasten, Klicks und Mausrad)
+        /// Do not record mouse movements (keys, clicks and wheel only)
         #[arg(long)]
         no_moves: bool,
     },
-    /// Makro abspielen
+    /// Play a macro
     Play {
-        /// ID oder Name des Makros
+        /// Id or name of the macro
         name: String,
-        /// Wiederholungen (0 = endlos), sonst Wert aus dem Makro
+        /// Repetitions (0 = endless); defaults to the value stored in the macro
         #[arg(short, long)]
         repeat: Option<u32>,
-        /// Geschwindigkeit (1.0 = original), sonst Wert aus dem Makro
+        /// Speed (1.0 = original); defaults to the value stored in the macro
         #[arg(short, long)]
         speed: Option<f64>,
-        /// Sekunden bis zum Start
+        /// Seconds before starting
         #[arg(short, long, default_value_t = 3)]
         delay: u64,
     },
-    /// Gespeicherte Makros auflisten
+    /// List saved macros
     Macros,
-    /// Zugriff auf /dev/uinput einrichten (fragt nach dem Passwort)
+    /// Grant access to /dev/uinput (asks for the password)
     Setup,
 }
 
 fn main() {
     let cli = Cli::parse();
-    let result = if cli.tuxhub {
-        tuxhub_autoclicker::rpc::serve()
+    let result = if cli.tuxly {
+        tuxly_autoclicker::rpc::serve()
     } else {
         match cli.command {
             Some(Command::Click {
@@ -96,7 +96,7 @@ fn main() {
             }) => play(&name, repeat, speed, delay),
             Some(Command::Macros) => list_macros(),
             Some(Command::Setup) => {
-                setup_access().map(|()| println!("Fertig: {UDEV_RULE_PATH} angelegt."))
+                setup_access().map(|()| println!("Done: created {UDEV_RULE_PATH}."))
             }
             None => {
                 use clap::CommandFactory;
@@ -105,7 +105,7 @@ fn main() {
         }
     };
     if let Err(e) = result {
-        eprintln!("Fehler: {e}");
+        eprintln!("Error: {e}");
         std::process::exit(1);
     }
 }
@@ -130,7 +130,7 @@ fn click(cfg: Config) -> std::io::Result<()> {
         ctrlc::set_handler(move || clicker.lock().unwrap().stop())
             .map_err(std::io::Error::other)?;
     }
-    eprintln!("Strg+C zum Stoppen.");
+    eprintln!("Press Ctrl+C to stop.");
     clicker.lock().unwrap().start(&cfg, true);
     let guard = done.0.lock().unwrap();
     let _guard = done.1.wait_while(guard, |d| !*d).unwrap();
@@ -143,8 +143,8 @@ fn store() -> std::io::Result<Store> {
 
 fn record(name: &str, moves: bool) -> std::io::Result<()> {
     let rec = Recorder::start(moves)?;
-    eprintln!("Nimmt auf von: {}", rec.devices.join(", "));
-    eprintln!("Strg+C beendet die Aufnahme.");
+    eprintln!("Recording from: {}", rec.devices.join(", "));
+    eprintln!("Press Ctrl+C to stop recording.");
     let (tx, rx) = std::sync::mpsc::channel();
     ctrlc::set_handler(move || {
         let _ = tx.send(());
@@ -153,7 +153,7 @@ fn record(name: &str, moves: bool) -> std::io::Result<()> {
     let _ = rx.recv();
     let steps = macros::to_steps(&rec.finish());
     if steps.is_empty() {
-        return Err(std::io::Error::other("Nichts aufgenommen"));
+        return Err(std::io::Error::other("nothing was recorded"));
     }
     let store = store()?;
     let m = store
@@ -167,7 +167,7 @@ fn record(name: &str, moves: bool) -> std::io::Result<()> {
         })
         .map_err(std::io::Error::other)?;
     eprintln!(
-        "\nGespeichert als „{}“ (ID {}, {} Schritte, {:.1} s).",
+        "\nSaved as \"{}\" (id {}, {} steps, {:.1} s).",
         m.name,
         m.id,
         m.steps.len(),
@@ -186,7 +186,7 @@ fn find_macro(store: &Store, name: &str) -> std::io::Result<Macro> {
                 .into_iter()
                 .find(|m| m.name.eq_ignore_ascii_case(name))
         })
-        .ok_or_else(|| std::io::Error::other(format!("Makro {name:?} nicht gefunden")))
+        .ok_or_else(|| std::io::Error::other(format!("macro {name:?} not found")))
 }
 
 fn play(name: &str, repeat: Option<u32>, speed: Option<f64>, delay: u64) -> std::io::Result<()> {
@@ -219,7 +219,7 @@ fn play(name: &str, repeat: Option<u32>, speed: Option<f64>, delay: u64) -> std:
         .map_err(std::io::Error::other)?;
     }
     for left in (1..=delay).rev() {
-        eprint!("\r\x1b[KStartet in {left} s …");
+        eprint!("\r\x1b[KStarting in {left} s");
         if rx.recv_timeout(std::time::Duration::from_secs(1)).is_ok() {
             eprintln!();
             return Ok(());
@@ -233,11 +233,11 @@ fn play(name: &str, repeat: Option<u32>, speed: Option<f64>, delay: u64) -> std:
 fn list_macros() -> std::io::Result<()> {
     let list = store()?.list();
     if list.is_empty() {
-        println!("Noch keine Makros. Aufnehmen mit: tuxhub-autoclicker record <name>");
+        println!("No macros yet. Record one with: tuxly-autoclicker record <name>");
     }
     for m in list {
         println!(
-            "{:<24} {:<20} {:>5} Schritte {:>7.1} s{}",
+            "{:<24} {:<20} {:>5} steps {:>7.1} s{}",
             m.id,
             m.name,
             m.steps.len(),

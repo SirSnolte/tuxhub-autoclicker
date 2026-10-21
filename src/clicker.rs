@@ -1,4 +1,4 @@
-//! Klick-Schleife in einem eigenen Thread.
+//! Click loop running in its own thread.
 
 use crate::device::{Button, Mouse};
 use serde::{Deserialize, Serialize};
@@ -9,11 +9,11 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
-    /// Einzelklicks
+    /// Single clicks
     Click,
-    /// Doppelklicks
+    /// Double clicks
     Double,
-    /// Taste gedrückt halten, bis gestoppt wird
+    /// Hold the button until stopped
     Hold,
 }
 
@@ -24,7 +24,7 @@ pub struct Config {
     pub jitter_pct: u32,
     pub button: Button,
     pub mode: Mode,
-    /// 0 = unbegrenzt
+    /// 0 = unlimited
     pub limit: u64,
     pub start_delay_s: u64,
 }
@@ -43,7 +43,7 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Begrenzt Werte auf vernünftige Bereiche.
+    /// Clamps values to sensible ranges.
     pub fn sanitized(mut self) -> Self {
         self.interval_ms = self.interval_ms.clamp(1, 3_600_000);
         self.jitter_pct = self.jitter_pct.min(90);
@@ -52,11 +52,50 @@ impl Config {
     }
 }
 
+/// State of the clicker. User interfaces build localized text from `phase`;
+/// `text` is an English fallback.
 #[derive(Debug, Clone, Serialize)]
 pub struct Status {
     pub running: bool,
+    pub phase: Phase,
     pub clicks: u64,
+    /// Remaining seconds while counting down.
+    pub seconds: u64,
+    pub error: Option<String>,
     pub text: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Phase {
+    Ready,
+    Countdown,
+    Clicking,
+    Holding,
+    Stopped,
+    Error,
+}
+
+impl Status {
+    pub fn new(phase: Phase, clicks: u64, seconds: u64, error: Option<String>) -> Self {
+        let text = match phase {
+            Phase::Ready => "Ready".to_string(),
+            Phase::Countdown => format!("Starting in {seconds} s"),
+            Phase::Clicking => format!("Clicking: {clicks} clicks"),
+            Phase::Holding => "Holding the button".to_string(),
+            Phase::Stopped => format!("Stopped after {clicks} clicks"),
+            Phase::Error => format!("Error: {}", error.as_deref().unwrap_or("unknown")),
+        };
+        let running = matches!(phase, Phase::Countdown | Phase::Clicking | Phase::Holding);
+        Self {
+            running,
+            phase,
+            clicks,
+            seconds,
+            error,
+            text,
+        }
+    }
 }
 
 pub type StatusFn = Arc<dyn Fn(&Status) + Send + Sync>;
@@ -69,7 +108,7 @@ struct Shared {
 }
 
 impl Shared {
-    /// Wartet `dur` oder bis gestoppt wird. Gibt `true` zurück, wenn gestoppt.
+    /// Waits for `dur` or until stopped. Returns `true` when stopped.
     fn wait(&self, dur: Duration) -> bool {
         let guard = self.stop.lock().unwrap();
         let (guard, _) = self
@@ -83,12 +122,8 @@ impl Shared {
         self.mouse.lock().unwrap().set(button, pressed)
     }
 
-    fn status(&self, running: bool, clicks: u64, text: impl Into<String>) {
-        (self.on_status)(&Status {
-            running,
-            clicks,
-            text: text.into(),
-        });
+    fn status(&self, phase: Phase, clicks: u64, seconds: u64) {
+        (self.on_status)(&Status::new(phase, clicks, seconds, None));
     }
 }
 
@@ -114,8 +149,8 @@ impl Clicker {
         self.thread.as_ref().is_some_and(|t| !t.is_finished())
     }
 
-    /// Startet das Klicken. `with_delay` nutzt die Startverzögerung aus der
-    /// Konfiguration (für den Start per Button, nicht per Hotkey).
+    /// Starts clicking. `with_delay` applies the configured start delay
+    /// (used when starting from the interface, not from a hotkey).
     pub fn start(&mut self, cfg: &Config, with_delay: bool) {
         if self.is_running() {
             return;
@@ -155,9 +190,9 @@ impl Drop for Clicker {
 
 fn run(shared: &Shared, cfg: &Config, delay_s: u64) {
     for left in (1..=delay_s).rev() {
-        shared.status(true, 0, format!("Startet in {left} s …"));
+        shared.status(Phase::Countdown, 0, left);
         if shared.wait(Duration::from_secs(1)) {
-            shared.status(false, 0, "Gestoppt");
+            shared.status(Phase::Stopped, 0, 0);
             return;
         }
     }
@@ -166,17 +201,17 @@ fn run(shared: &Shared, cfg: &Config, delay_s: u64) {
         Mode::Hold => hold(shared, cfg),
         Mode::Click | Mode::Double => click_loop(shared, cfg),
     };
-    // Sicherheitshalber nie eine gedrückte Taste zurücklassen.
+    // Never leave a button pressed.
     let _ = shared.set(cfg.button, false);
     match result {
-        Ok(clicks) => shared.status(false, clicks, format!("Gestoppt – {clicks} Klicks")),
-        Err(e) => shared.status(false, 0, format!("Fehler: {e}")),
+        Ok(clicks) => shared.status(Phase::Stopped, clicks, 0),
+        Err(e) => (shared.on_status)(&Status::new(Phase::Error, 0, 0, Some(e.to_string()))),
     }
 }
 
 fn hold(shared: &Shared, cfg: &Config) -> std::io::Result<u64> {
     shared.set(cfg.button, true)?;
-    shared.status(true, 0, "Hält die Taste gedrückt");
+    shared.status(Phase::Holding, 0, 0);
     while !shared.wait(Duration::from_secs(3600)) {}
     Ok(0)
 }
@@ -184,7 +219,7 @@ fn hold(shared: &Shared, cfg: &Config) -> std::io::Result<u64> {
 fn click_loop(shared: &Shared, cfg: &Config) -> std::io::Result<u64> {
     let mut rng = Rng::seeded();
     let interval = Duration::from_millis(cfg.interval_ms);
-    // Wie lange die Taste unten bleibt: kurz, aber nie länger als das halbe Intervall.
+    // How long the button stays down: short, but never longer than half the interval.
     let press = Duration::from_millis(12).min(interval / 2);
     let mut clicks = 0u64;
     let mut last_status = Instant::now() - Duration::from_secs(1);
@@ -208,7 +243,7 @@ fn click_loop(shared: &Shared, cfg: &Config) -> std::io::Result<u64> {
         }
         if last_status.elapsed() >= Duration::from_millis(200) {
             last_status = Instant::now();
-            shared.status(true, clicks, format!("Klickt – {clicks} Klicks"));
+            shared.status(Phase::Clicking, clicks, 0);
         }
 
         let mut wait = interval.saturating_sub(press);
@@ -223,7 +258,7 @@ fn click_loop(shared: &Shared, cfg: &Config) -> std::io::Result<u64> {
     }
 }
 
-/// Kleiner xorshift-Zufallsgenerator – für Jitter reicht das völlig.
+/// Small xorshift generator; sufficient for timing jitter.
 struct Rng(u64);
 
 impl Rng {
@@ -248,7 +283,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn config_from_hub_settings() {
+    fn config_from_settings() {
         let cfg: Config = serde_json::from_value(serde_json::json!({
             "interval_ms": 50, "button": "right", "mode": "double", "unknown": 1
         }))
@@ -278,5 +313,15 @@ mod tests {
             let v = r.next_f64();
             assert!((0.0..1.0).contains(&v));
         }
+    }
+
+    #[test]
+    fn status_phases() {
+        assert!(Status::new(Phase::Clicking, 5, 0, None).running);
+        assert!(!Status::new(Phase::Stopped, 5, 0, None).running);
+        assert_eq!(
+            Status::new(Phase::Countdown, 0, 3, None).text,
+            "Starting in 3 s"
+        );
     }
 }

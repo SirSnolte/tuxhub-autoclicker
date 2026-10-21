@@ -1,4 +1,4 @@
-//! Autoclicker und Makros für Linux über uinput.
+//! Autoclicker and input macros for Linux, based on uinput.
 
 pub mod clicker;
 pub mod device;

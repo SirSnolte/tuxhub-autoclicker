@@ -1,7 +1,7 @@
-//! Aufnahme von Tastatur und Maus über `/dev/input/event*`.
+//! Recording of keyboard and mouse input from `/dev/input/event*`.
 //!
-//! Liest nur mit (kein Grab) – die Eingaben gehen also ganz normal weiter an
-//! Spiel und Desktop. Gelesen wird ausschließlich während einer Aufnahme.
+//! Devices are read without being grabbed, so input continues to reach the
+//! game and the desktop. Devices are read only while a recording is active.
 
 use crate::macros::{RawEvent, RawKind};
 use evdev::{Device, EventSummary, KeyCode, RelativeAxisCode};
@@ -18,18 +18,18 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    /// Öffnet alle lesbaren Tastaturen und Mäuse und beginnt die Aufnahme.
+    /// Opens all readable keyboards and mice and starts recording.
     pub fn start(record_moves: bool) -> io::Result<Self> {
         Self::start_filtered(record_moves, |_| true)
     }
 
-    /// Wie [`start`](Self::start), aber nur Geräte, deren Name `filter` erfüllt.
+    /// Like [`start`](Self::start), but only for devices whose name matches `filter`.
     pub fn start_filtered(record_moves: bool, filter: impl Fn(&str) -> bool) -> io::Result<Self> {
         let mut devs = Vec::new();
         let mut names = Vec::new();
         for (_, dev) in evdev::enumerate() {
             let name = dev.name().unwrap_or("").to_string();
-            // Eigene virtuelle Geräte nicht mit aufnehmen.
+            // Never record the virtual devices of this tool.
             if name.starts_with(crate::device::DEVICE_NAME) || !filter(&name) {
                 continue;
             }
@@ -51,8 +51,8 @@ impl Recorder {
         if devs.is_empty() {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                "Keine Tastatur oder Maus lesbar. Ist dein Nutzer in der Gruppe `input`? \
-                 (sudo usermod -aG input $USER, danach neu anmelden)",
+                "no keyboard or mouse is readable. Recording requires membership in the \
+                 `input` group: sudo usermod -aG input $USER, then log in again",
             ));
         }
 
@@ -66,7 +66,7 @@ impl Recorder {
         })
     }
 
-    /// Beendet die Aufnahme und liefert die rohen Ereignisse.
+    /// Stops recording and returns the raw events.
     pub fn finish(mut self) -> Vec<RawEvent> {
         self.stop.store(true, Ordering::SeqCst);
         self.thread
@@ -94,7 +94,7 @@ fn read_loop(mut devs: Vec<Device>, stop: &AtomicBool, record_moves: bool) -> Ve
         .collect();
 
     while !stop.load(Ordering::SeqCst) {
-        // Mit Timeout, damit `stop` regelmäßig geprüft wird.
+        // Use a timeout so that `stop` is checked regularly.
         let n = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, 50) };
         if n <= 0 {
             continue;
@@ -110,7 +110,7 @@ fn read_loop(mut devs: Vec<Device>, stop: &AtomicBool, record_moves: bool) -> Ve
             for ev in events {
                 let time = ev.timestamp();
                 let kind = match ev.destructure() {
-                    // value 2 = Autorepeat, das erzeugt das System beim Abspielen selbst
+                    // value 2 is key repeat, which the system generates again during playback
                     EventSummary::Key(_, code, v @ (0 | 1)) => RawKind::Key {
                         code: code.code(),
                         down: v == 1,
@@ -138,7 +138,7 @@ fn read_loop(mut devs: Vec<Device>, stop: &AtomicBool, record_moves: bool) -> Ve
             }
         }
     }
-    // Geräte kommen in unterschiedlicher Reihenfolge an – nach Zeit sortieren.
+    // Events from different devices arrive out of order; sort them by time.
     out.sort_by_key(|e| e.time);
     out
 }

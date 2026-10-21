@@ -1,4 +1,4 @@
-//! Makro-Wiedergabe über ein virtuelles Tastatur-und-Maus-Gerät.
+//! Macro playback through a virtual keyboard and mouse device.
 
 use crate::macros::{Action, Macro, playable_key};
 use evdev::uinput::VirtualDevice;
@@ -11,7 +11,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-pub const PLAYER_DEVICE_NAME: &str = "tuxhub-autoclicker-macro";
+pub const PLAYER_DEVICE_NAME: &str = "tuxly-autoclicker-macro";
 
 pub struct Keyboard {
     dev: VirtualDevice,
@@ -58,10 +58,19 @@ impl Keyboard {
     }
 }
 
+/// Playback state. User interfaces build localized text from `phase`;
+/// `text` is an English fallback.
 #[derive(Debug, Clone, Serialize)]
 pub struct PlayStatus {
+    /// Id of the macro being played, if any.
     pub playing: Option<String>,
+    /// `playing`, `finished`, `stopped` or `error`.
+    pub phase: &'static str,
+    pub name: String,
     pub round: u32,
+    /// Total rounds, 0 = endless.
+    pub rounds: u32,
+    pub error: Option<String>,
     pub text: String,
 }
 
@@ -104,7 +113,7 @@ impl Player {
         self.thread.as_ref().is_some_and(|t| !t.is_finished())
     }
 
-    /// Spielt ein Makro ab; ein laufendes wird vorher gestoppt.
+    /// Plays a macro; a macro that is already playing is stopped first.
     pub fn play(&mut self, m: Macro) {
         self.stop();
         *self.shared.stop.lock().unwrap() = false;
@@ -128,10 +137,21 @@ impl Drop for Player {
 }
 
 fn run(shared: &Shared, m: &Macro) {
-    let status = |round: u32, playing: bool, text: String| {
+    let status = |round: u32, phase: &'static str, error: Option<String>| {
+        let text = match phase {
+            "playing" if m.repeat == 0 => format!("Playing \"{}\", round {round}", m.name),
+            "playing" => format!("Playing \"{}\", round {round} of {}", m.name, m.repeat),
+            "finished" => format!("\"{}\" finished", m.name),
+            "stopped" => format!("\"{}\" stopped", m.name),
+            _ => format!("Error: {}", error.as_deref().unwrap_or("unknown")),
+        };
         (shared.on_status)(&PlayStatus {
-            playing: playing.then(|| m.id.clone()),
+            playing: (phase == "playing").then(|| m.id.clone()),
+            phase,
+            name: m.name.clone(),
             round,
+            rounds: m.repeat,
+            error,
             text,
         });
     };
@@ -141,16 +161,7 @@ fn run(shared: &Shared, m: &Macro) {
     let result: io::Result<bool> = (|| {
         loop {
             round += 1;
-            let of = if m.repeat == 0 {
-                "∞".to_string()
-            } else {
-                m.repeat.to_string()
-            };
-            status(
-                round,
-                true,
-                format!("Spielt „{}“ – Runde {round}/{of}", m.name),
-            );
+            status(round, "playing", None);
             for step in &m.steps {
                 let wait = Duration::from_secs_f64(step.delay_ms as f64 / 1000.0 / speed);
                 if !wait.is_zero() && shared.wait(wait) {
@@ -182,22 +193,22 @@ fn run(shared: &Shared, m: &Macro) {
             if m.repeat != 0 && round >= m.repeat {
                 return Ok(true);
             }
-            // Leeres Makro in Endlosschleife würde sonst die CPU verbrennen.
+            // Prevent an empty endless macro from spinning the CPU.
             if m.duration_ms() == 0 && shared.wait(Duration::from_millis(10)) {
                 return Ok(false);
             }
         }
     })();
 
-    // Nie eine gedrückte Taste zurücklassen.
+    // Never leave a key pressed.
     let mut kb = shared.kb.lock().unwrap();
     for code in held {
         let _ = kb.key(code, false);
     }
     drop(kb);
     match result {
-        Ok(true) => status(round, false, format!("„{}“ fertig", m.name)),
-        Ok(false) => status(round, false, format!("„{}“ gestoppt", m.name)),
-        Err(e) => status(round, false, format!("Fehler: {e}")),
+        Ok(true) => status(round, "finished", None),
+        Ok(false) => status(round, "stopped", None),
+        Err(e) => status(round, "error", Some(e.to_string())),
     }
 }

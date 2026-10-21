@@ -1,463 +1,117 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <title>Autoclicker</title>
-    <script src="/__tuxhub/bridge.js"></script>
-    <style>
-      :root {
-        --bg: transparent; --panel: #ffffff; --panel-2: #eceef2; --border: #d9dce3; --text: #1b1d22;
-        --muted: #646a76; --accent: #2f7d4f; --accent-text: #fff; --accent-soft: #dcefe3;
-        --danger: #b3261e; --danger-soft: #fbe3e1; --warn-soft: #fff3cd; --warn-text: #6b4e00;
-        color-scheme: light;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --panel: #1b1e24; --panel-2: #23272f; --border: #2e333d; --text: #e7e9ee; --muted: #9198a5;
-          --accent: #4fbf7d; --accent-text: #0b1a11; --accent-soft: #1c3426; --danger: #ff7a6e;
-          --danger-soft: #3a1d1b; --warn-soft: #3a3115; --warn-text: #f3d77a; color-scheme: dark;
-        }
-      }
-      * { box-sizing: border-box; }
-      body { margin: 0; padding: 16px 18px; background: var(--bg); color: var(--text);
-        font: 14px/1.5 system-ui, "Noto Sans", sans-serif; }
-      h2 { font-size: 16px; margin: 0 0 8px; }
-      button, input, select { font: inherit; color: inherit; }
-      button { cursor: pointer; border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 5px 12px; }
-      button:hover:not(:disabled) { background: var(--panel-2); }
-      button:disabled { opacity: .5; cursor: default; }
-      button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
-      button.danger { color: var(--danger); }
-      button.small { padding: 2px 8px; font-size: 13px; }
-      button.icon { padding: 2px 7px; border: none; background: none; }
-      input, select { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; }
-      input[type="number"] { width: 100px; text-align: right; }
-      .muted { color: var(--muted); }
-      .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
-      .tabs button { border: none; background: none; border-radius: 0; padding: 8px 14px; border-bottom: 2px solid transparent; }
-      .tabs button.active { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
-      .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .between { justify-content: space-between; }
-      .status { font-weight: 600; margin: 10px 0; min-height: 1.5em; }
-      .status.rec { color: var(--danger); }
-      .form { display: grid; gap: 0; max-width: 620px; }
-      .field { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--border); }
-      .field small { display: block; }
-      kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
-      .notice { background: var(--warn-soft); color: var(--warn-text); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; }
-      table { border-collapse: collapse; width: 100%; }
-      th, td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-      th { font-weight: 600; color: var(--muted); font-size: 12px; }
-      td.num { text-align: right; white-space: nowrap; }
-      tr.playing td { background: var(--accent-soft); }
-      .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
-      .steps { max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
-      .steps td input[type="number"] { width: 80px; }
-      .grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
-      .grid2 label { display: grid; gap: 3px; font-size: 13px; }
-      .hidden { display: none !important; }
-      .err { color: var(--danger); }
-      .capturing { outline: 2px solid var(--accent); outline-offset: 1px; }
-    </style>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__tuxly/bridge.js"></script>
   </head>
   <body>
-    <div class="tabs">
-      <button data-tab="clicker" class="active">Autoclicker</button>
-      <button data-tab="macros">Makros</button>
+    <p class="notice" data-i18n="notice.anticheat"></p>
+
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="clicker" class="active" data-i18n="tab.clicker"></button>
+      <button role="tab" data-tab="macros" data-i18n="tab.macros"></button>
     </div>
 
-    <!-- ------------------------------------------------------ Autoclicker -->
     <section id="tab-clicker">
       <div class="row">
-        <button class="primary" data-action="start">Start</button>
-        <button data-action="stop">Stopp</button>
-        <span class="muted">Hotkey <kbd>F8</kbd> startet/stoppt sofort, <kbd>F10</kbd> stoppt alles. Eigene Stopp-Taste: siehe unten.</span>
+        <button class="primary" data-action="start" data-i18n="clicker.start"></button>
+        <button data-action="stop" data-i18n="clicker.stop"></button>
+        <span class="muted" data-i18n="clicker.hotkeys"></span>
       </div>
-      <p class="status" id="clicker-status"></p>
+      <p class="status" id="clicker-status" aria-live="polite"></p>
       <div class="form" id="clicker-form"></div>
       <div class="form">
         <div class="field">
-          <span>Stopp-Taste (optional)<small class="muted">Eigener Hotkey, der nur den Klicker stoppt – zusätzlich zu F8/F10.</small></span>
+          <span>
+            <span data-i18n="clicker.stopKey"></span>
+            <small class="muted" data-i18n="clicker.stopKeyHelp"></small>
+          </span>
           <span class="row">
-            <kbd id="stop-key">keine</kbd>
-            <button class="small" id="stop-set">Taste festlegen</button>
-            <button class="small danger" id="stop-clear">Entfernen</button>
+            <kbd id="stop-key"></kbd>
+            <button class="small" id="stop-set" data-i18n="key.set"></button>
+            <button class="small danger" id="stop-clear" data-i18n="key.clear"></button>
           </span>
         </div>
       </div>
-      <p class="muted" style="margin-top: 14px">
-        Funktioniert nichts? <button class="small" data-action="setup">uinput-Zugriff einrichten</button>
+      <p class="muted setup">
+        <span data-i18n="clicker.setupHint"></span>
+        <button class="small" data-action="setup" data-i18n="clicker.setup"></button>
       </p>
     </section>
 
-    <!-- ----------------------------------------------------------- Makros -->
     <section id="tab-macros" class="hidden">
       <div id="list-view">
         <div class="row between">
           <div class="row">
-            <button class="primary" id="rec-btn">● Aufnahme starten</button>
-            <span class="muted">oder <kbd>F9</kbd> – im Spiel drücken, nochmal drücken zum Beenden.</span>
+            <button class="primary" id="rec-btn"></button>
+            <span class="muted" data-i18n="macros.recordHint"></span>
           </div>
-          <button id="new-btn">Leeres Makro</button>
+          <button id="new-btn" data-i18n="macros.new"></button>
         </div>
-        <p class="status" id="macro-status"></p>
-        <p class="notice">
-          Während der Aufnahme wird jede Taste gespeichert – also keine Passwörter eintippen.
-        </p>
+        <p class="status" id="macro-status" aria-live="polite"></p>
+        <p class="notice" data-i18n="macros.privacy"></p>
         <table>
           <thead>
-            <tr><th>Name</th><th class="num">Schritte</th><th class="num">Dauer</th><th>Wdh.</th><th>Hotkey</th><th></th></tr>
+            <tr>
+              <th data-i18n="macros.name"></th>
+              <th class="num" data-i18n="macros.steps"></th>
+              <th class="num" data-i18n="macros.duration"></th>
+              <th data-i18n="macros.repeat"></th>
+              <th data-i18n="macros.hotkey"></th>
+              <th></th>
+            </tr>
           </thead>
           <tbody id="macro-rows"></tbody>
         </table>
-        <p class="muted" id="empty" style="margin-top: 12px">Noch keine Makros. Starte eine Aufnahme mit <kbd>F9</kbd>.</p>
+        <p class="muted empty" id="empty" data-i18n="macros.empty"></p>
       </div>
 
       <div id="editor" class="hidden card">
-        <div class="row between" style="margin-bottom: 10px">
-          <h2 id="ed-title">Makro bearbeiten</h2>
+        <div class="row between editor-head">
+          <h2 id="ed-title"></h2>
           <div class="row">
-            <button id="ed-cancel">Abbrechen</button>
-            <button class="primary" id="ed-save">Speichern</button>
+            <button id="ed-cancel" data-i18n="editor.cancel"></button>
+            <button class="primary" id="ed-save" data-i18n="editor.save"></button>
           </div>
         </div>
         <div class="grid2">
-          <label>Name <input id="ed-name" /></label>
-          <label>Wiederholungen (0 = endlos) <input id="ed-repeat" type="number" min="0" max="100000" /></label>
-          <label>Geschwindigkeit <input id="ed-speed" type="number" min="0.1" max="10" step="0.1" /></label>
-          <label>Hotkey (z. B. CTRL+F1)
-            <span class="row"><input id="ed-shortcut" placeholder="keiner" style="flex:1" /><button class="small" id="ed-capture">Festlegen</button></span>
+          <label><span data-i18n="editor.name"></span><input id="ed-name" /></label>
+          <label><span data-i18n="editor.repeat"></span><input id="ed-repeat" type="number" min="0" max="100000" /></label>
+          <label><span data-i18n="editor.speed"></span><input id="ed-speed" type="number" min="0.1" max="10" step="0.1" /></label>
+          <label>
+            <span data-i18n="editor.hotkey"></span>
+            <span class="row"><input id="ed-shortcut" class="grow" /><button class="small" id="ed-capture" data-i18n="key.set"></button></span>
           </label>
         </div>
-        <div class="row" style="margin-bottom: 8px">
-          <span class="muted">Schritt hinzufügen:</span>
-          <select id="add-key"></select>
-          <button class="small" data-add="tap">Tippen</button>
-          <button class="small" data-add="down">Drücken</button>
-          <button class="small" data-add="up">Loslassen</button>
-          <button class="small" data-add="wait">Warten</button>
-          <button class="small" id="ed-shift" title="Alle Wartezeiten verkürzen oder verlängern">Zeiten ×</button>
+        <div class="row add-row">
+          <span class="muted" data-i18n="editor.add"></span>
+          <select id="add-key" aria-label="Key"></select>
+          <button class="small" data-add="tap" data-i18n="editor.tap"></button>
+          <button class="small" data-add="down" data-i18n="editor.press"></button>
+          <button class="small" data-add="up" data-i18n="editor.release"></button>
+          <button class="small" data-add="wait" data-i18n="editor.wait"></button>
+          <button class="small" id="ed-scale" data-i18n="editor.scale" data-i18n-title="editor.scaleHelp"></button>
         </div>
         <div class="steps">
           <table>
-            <thead><tr><th>#</th><th class="num">Warten (ms)</th><th>Aktion</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th class="num" data-i18n="editor.delay"></th>
+                <th data-i18n="editor.action"></th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody id="step-rows"></tbody>
           </table>
         </div>
         <p class="muted" id="ed-summary"></p>
-        <p class="err" id="ed-error"></p>
+        <p class="error" id="ed-error"></p>
       </div>
     </section>
 
-    <script>
-      const $ = (id) => document.getElementById(id);
-      const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-      const fail = (e) => alert(e.message ?? e);
-
-      // ------------------------------------------------------------ Reiter
-      document.querySelectorAll(".tabs button").forEach((b) => {
-        b.onclick = () => {
-          document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x === b));
-          $("tab-clicker").classList.toggle("hidden", b.dataset.tab !== "clicker");
-          $("tab-macros").classList.toggle("hidden", b.dataset.tab !== "macros");
-          if (b.dataset.tab === "macros") loadMacros();
-        };
-      });
-      document.querySelectorAll("[data-action]").forEach((b) => {
-        b.onclick = () => tuxhub.action(b.dataset.action).catch(fail);
-      });
-
-      // ------------------------------------------------------- Autoclicker
-      const FIELDS = [
-        { key: "interval_ms", label: "Intervall", type: "number", min: 1, max: 60000, unit: "ms", help: "Zeit zwischen zwei Klicks" },
-        { key: "jitter_pct", label: "Zufällige Abweichung", type: "number", min: 0, max: 50, unit: "%" },
-        { key: "button", label: "Maustaste", type: "select", options: [["left", "Links"], ["right", "Rechts"], ["middle", "Mitte"]] },
-        { key: "mode", label: "Modus", type: "select", options: [["click", "Einzelklick"], ["double", "Doppelklick"], ["hold", "Gedrückt halten"]] },
-        { key: "limit", label: "Anzahl Klicks", type: "number", min: 0, max: 1000000, help: "0 = unbegrenzt" },
-        { key: "start_delay_s", label: "Startverzögerung", type: "number", min: 0, max: 30, unit: "s", help: "Nur für „Start“, der Hotkey startet sofort" },
-      ];
-      let settings = {};
-      let saveTimer;
-      function save(key, value) {
-        settings[key] = value;
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => tuxhub.saveSettings({ [key]: value, ...settings }).catch(fail), 300);
-      }
-      function renderForm() {
-        const form = $("clicker-form");
-        form.innerHTML = "";
-        for (const f of FIELDS) {
-          const row = document.createElement("label");
-          row.className = "field";
-          row.innerHTML = `<span>${esc(f.label)}${f.help ? `<small class="muted">${esc(f.help)}</small>` : ""}</span><span class="row"></span>`;
-          const ctl = row.lastChild;
-          let input;
-          if (f.type === "select") {
-            input = document.createElement("select");
-            for (const [v, l] of f.options) input.add(new Option(l, v));
-            input.value = settings[f.key];
-            input.onchange = () => save(f.key, input.value);
-          } else {
-            input = document.createElement("input");
-            input.type = "number";
-            input.min = f.min;
-            input.max = f.max;
-            input.value = settings[f.key];
-            input.onchange = () => {
-              let n = Math.round(Number(input.value));
-              if (!Number.isFinite(n)) n = f.min;
-              n = Math.min(f.max, Math.max(f.min, n));
-              input.value = n;
-              save(f.key, n);
-            };
-          }
-          ctl.append(input);
-          if (f.unit) ctl.append(Object.assign(document.createElement("span"), { className: "muted", textContent: f.unit }));
-          form.append(row);
-        }
-        const rm = document.createElement("label");
-        rm.className = "field";
-        rm.innerHTML = `<span>Mausbewegungen in Makros aufnehmen<small class="muted">Aus = nur Tasten, Klicks und Mausrad</small></span>`;
-        const cb = Object.assign(document.createElement("input"), { type: "checkbox", checked: !!settings.record_moves });
-        cb.onchange = () => save("record_moves", cb.checked);
-        rm.append(cb);
-        form.append(rm);
-      }
-      tuxhub.on("status", (s) => ($("clicker-status").textContent = s.text ?? ""));
-      tuxhub.getSettings().then((s) => { settings = s; renderForm(); showStop(); }).catch(fail);
-
-      // --------------------------------------------------- Taste festlegen
-      // Wandelt einen Tastendruck in das XDG-Hotkey-Format um (CTRL+SHIFT+q, F7, …).
-      const NAMED = {
-        Pause: "Pause", ScrollLock: "Scroll_Lock", Insert: "Insert", Home: "Home", End: "End",
-        PageUp: "Page_Up", PageDown: "Page_Down", Delete: "Delete", Escape: "Escape", " ": "space",
-        Enter: "Return", Tab: "Tab", Backspace: "BackSpace",
-      };
-      const STANDALONE = new Set(["Pause", "Scroll_Lock", "Insert", "Home", "End", "Page_Up", "Page_Down", "Delete"]);
-      function toTrigger(e) {
-        if (["Control", "Alt", "Shift", "Meta", "AltGraph", "OS"].includes(e.key)) return { wait: true };
-        let key = null;
-        if (/^F([1-9]|1\d|2[0-4])$/.test(e.key)) key = e.key;
-        else if (/^Key[A-Z]$/.test(e.code)) key = e.code.slice(3).toLowerCase();
-        else if (/^Digit\d$/.test(e.code)) key = e.code.slice(5);
-        else key = NAMED[e.key] ?? null;
-        if (!key) return { error: `Taste „${e.key}“ wird nicht unterstützt` };
-        const mods = [];
-        if (e.ctrlKey) mods.push("CTRL");
-        if (e.altKey) mods.push("ALT");
-        if (e.shiftKey) mods.push("SHIFT");
-        if (e.metaKey) mods.push("LOGO");
-        const strong = mods.some((m) => m !== "SHIFT");
-        if (!strong && !/^F\d+$/.test(key) && !STANDALONE.has(key)) {
-          return { error: "Diese Taste braucht man zum Tippen/Spielen – bitte mit Strg, Alt oder Super kombinieren." };
-        }
-        return { trigger: [...mods, key].join("+") };
-      }
-      /** Wartet auf den nächsten Tastendruck. Escape bricht ab. */
-      function captureKey(button) {
-        return new Promise((resolve) => {
-          const old = button.textContent;
-          button.textContent = "Taste drücken … (Esc = Abbruch)";
-          button.classList.add("capturing");
-          const done = (val) => {
-            window.removeEventListener("keydown", onKey, true);
-            button.textContent = old;
-            button.classList.remove("capturing");
-            resolve(val);
-          };
-          const onKey = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.key === "Escape" && !e.ctrlKey && !e.altKey && !e.metaKey) return done(null);
-            const r = toTrigger(e);
-            if (r.wait) return;
-            if (r.error) { alert(r.error); return done(null); }
-            done(r.trigger);
-          };
-          window.addEventListener("keydown", onKey, true);
-          window.focus();
-        });
-      }
-
-      const showStop = () => ($("stop-key").textContent = settings.stop_shortcut || "keine");
-      $("stop-set").onclick = async () => {
-        const t = await captureKey($("stop-set"));
-        if (!t) return;
-        settings.stop_shortcut = t;
-        showStop();
-        tuxhub.saveSettings({ ...settings }).catch(fail);
-      };
-      $("stop-clear").onclick = () => {
-        settings.stop_shortcut = "";
-        showStop();
-        tuxhub.saveSettings({ ...settings }).catch(fail);
-      };
-
-      // ------------------------------------------------------------ Makros
-      let macros = [];
-      let recording = false;
-      let playing = null;
-      let keyNames = new Map();
-
-      tuxhub.call("keys").then((keys) => {
-        keyNames = new Map(keys);
-        const sel = $("add-key");
-        const nice = (n) => n.replace(/^KEY_/, "").replace(/^BTN_/, "Maus ");
-        const sorted = [...keys].sort((a, b) => nice(a[1]).localeCompare(nice(b[1]), "de", { numeric: true }));
-        for (const [code, name] of sorted) sel.add(new Option(nice(name), code));
-        sel.value = 30; // A
-      });
-
-      function keyLabel(code) {
-        const n = keyNames.get(code) ?? `#${code}`;
-        return n.startsWith("BTN_") ? "Maus " + n.slice(4).toLowerCase() : n.replace(/^KEY_/, "");
-      }
-      const fmtMs = (ms) => (ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : ms + " ms");
-
-      async function loadMacros() {
-        macros = await tuxhub.call("macros.list").catch((e) => (fail(e), []));
-        renderMacros();
-      }
-      function renderMacros() {
-        $("empty").classList.toggle("hidden", macros.length > 0);
-        $("macro-rows").innerHTML = macros
-          .map((m) => `<tr class="${playing === m.id ? "playing" : ""}">
-              <td>${esc(m.name)}</td>
-              <td class="num">${m.steps}</td>
-              <td class="num">${fmtMs(m.duration_ms)}</td>
-              <td>${m.repeat === 0 ? "∞" : m.repeat}×${m.speed !== 1 ? ` @${m.speed}x` : ""}</td>
-              <td>${m.shortcut ? `<kbd>${esc(m.shortcut)}</kbd>` : '<span class="muted">–</span>'}</td>
-              <td class="num">
-                ${playing === m.id
-                  ? `<button class="small" data-stop>■ Stopp</button>`
-                  : `<button class="small primary" data-play="${m.id}">▶ Abspielen</button>`}
-                <button class="small" data-edit="${m.id}">Bearbeiten</button>
-                <button class="small danger" data-del="${m.id}">Löschen</button>
-              </td></tr>`)
-          .join("");
-      }
-      $("macro-rows").onclick = async (e) => {
-        const b = e.target.closest("button");
-        if (!b) return;
-        try {
-          if (b.dataset.play) await tuxhub.call("macros.play", { id: b.dataset.play });
-          if ("stop" in b.dataset) await tuxhub.call("macros.stop");
-          if (b.dataset.edit) openEditor(await tuxhub.call("macros.get", { id: b.dataset.edit }));
-          if (b.dataset.del) {
-            const m = macros.find((x) => x.id === b.dataset.del);
-            if (confirm(`„${m.name}“ löschen?`)) await tuxhub.call("macros.delete", { id: m.id });
-          }
-        } catch (err) { fail(err); }
-      };
-      $("rec-btn").onclick = () => tuxhub.action("record").catch(fail);
-      $("new-btn").onclick = () => openEditor({ id: "", name: "Neues Makro", steps: [], repeat: 1, speed: 1 });
-
-      tuxhub.on("macro-status", (s) => {
-        recording = s.recording;
-        playing = s.playing ?? null;
-        $("macro-status").textContent = s.text ?? "";
-        $("macro-status").classList.toggle("rec", recording);
-        $("rec-btn").textContent = recording ? "■ Aufnahme beenden" : "● Aufnahme starten";
-        renderMacros();
-      });
-      tuxhub.on("macros-changed", loadMacros);
-
-      // ------------------------------------------------------------ Editor
-      let draft = null;
-
-      function openEditor(m) {
-        draft = structuredClone(m);
-        $("ed-title").textContent = m.id ? "Makro bearbeiten" : "Neues Makro";
-        $("ed-name").value = m.name;
-        $("ed-repeat").value = m.repeat;
-        $("ed-speed").value = m.speed;
-        $("ed-shortcut").value = m.shortcut ?? "";
-        $("ed-error").textContent = "";
-        $("list-view").classList.add("hidden");
-        $("editor").classList.remove("hidden");
-        renderSteps();
-      }
-      function closeEditor() {
-        draft = null;
-        $("editor").classList.add("hidden");
-        $("list-view").classList.remove("hidden");
-      }
-      function describe(s) {
-        switch (s.type) {
-          case "key": return `${s.down ? "⬇ Drücken" : "⬆ Loslassen"}: <b>${esc(keyLabel(s.code))}</b>`;
-          case "move": return `Maus bewegen (${s.dx}, ${s.dy})`;
-          case "scroll": return `Mausrad ${s.dy > 0 ? "hoch" : s.dy < 0 ? "runter" : ""}${s.dx ? ` seitlich ${s.dx}` : ""} (${s.dy || s.dx})`;
-          case "wait": return `<span class="muted">Warten</span>`;
-        }
-        return esc(s.type);
-      }
-      function renderSteps() {
-        $("step-rows").innerHTML = draft.steps
-          .map((s, i) => `<tr>
-              <td class="muted">${i + 1}</td>
-              <td class="num"><input type="number" min="0" max="3600000" value="${s.delay_ms}" data-delay="${i}" /></td>
-              <td>${describe(s)}</td>
-              <td class="num">
-                <button class="icon" data-up="${i}" title="Nach oben" ${i === 0 ? "disabled" : ""}>↑</button>
-                <button class="icon" data-down="${i}" title="Nach unten" ${i === draft.steps.length - 1 ? "disabled" : ""}>↓</button>
-                <button class="icon danger" data-rm="${i}" title="Entfernen">✕</button>
-              </td></tr>`)
-          .join("");
-        const total = draft.steps.reduce((a, s) => a + (s.delay_ms || 0), 0);
-        $("ed-summary").textContent = `${draft.steps.length} Schritte · ${fmtMs(total)} pro Durchlauf`;
-      }
-      $("step-rows").oninput = (e) => {
-        const i = e.target.dataset.delay;
-        if (i != null) draft.steps[i].delay_ms = Math.max(0, Math.round(Number(e.target.value) || 0));
-      };
-      $("step-rows").onchange = () => renderSteps();
-      $("step-rows").onclick = (e) => {
-        const b = e.target.closest("button");
-        if (!b) return;
-        const s = draft.steps;
-        const swap = (a, c) => ([s[a], s[c]] = [s[c], s[a]]);
-        if (b.dataset.up) swap(+b.dataset.up, +b.dataset.up - 1);
-        if (b.dataset.down) swap(+b.dataset.down, +b.dataset.down + 1);
-        if (b.dataset.rm) s.splice(+b.dataset.rm, 1);
-        renderSteps();
-      };
-      document.querySelectorAll("[data-add]").forEach((b) => {
-        b.onclick = () => {
-          const code = Number($("add-key").value);
-          const add = (step) => draft.steps.push(step);
-          if (b.dataset.add === "tap") { add({ type: "key", code, down: true, delay_ms: 50 }); add({ type: "key", code, down: false, delay_ms: 30 }); }
-          if (b.dataset.add === "down") add({ type: "key", code, down: true, delay_ms: 50 });
-          if (b.dataset.add === "up") add({ type: "key", code, down: false, delay_ms: 50 });
-          if (b.dataset.add === "wait") add({ type: "wait", delay_ms: 500 });
-          renderSteps();
-          $("step-rows").parentElement.parentElement.scrollTop = 1e9;
-        };
-      });
-      $("ed-shift").onclick = () => {
-        const f = Number(prompt("Alle Wartezeiten multiplizieren mit (z. B. 0.5 = doppelt so schnell):", "1"));
-        if (!f || f <= 0) return;
-        draft.steps.forEach((s) => (s.delay_ms = Math.round(s.delay_ms * f)));
-        renderSteps();
-      };
-      $("ed-capture").onclick = async () => {
-        const t = await captureKey($("ed-capture"));
-        if (t) $("ed-shortcut").value = t;
-      };
-      $("ed-cancel").onclick = closeEditor;
-      $("ed-save").onclick = async () => {
-        draft.name = $("ed-name").value;
-        draft.repeat = Math.max(0, Math.round(Number($("ed-repeat").value) || 0));
-        draft.speed = Number($("ed-speed").value) || 1;
-        draft.shortcut = $("ed-shortcut").value.trim() || null;
-        try {
-          await tuxhub.call("macros.save", draft);
-          closeEditor();
-        } catch (e) {
-          $("ed-error").textContent = e.message;
-        }
-      };
-
-      loadMacros();
-    </script>
+    <script src="app.js"></script>
   </body>
 </html>

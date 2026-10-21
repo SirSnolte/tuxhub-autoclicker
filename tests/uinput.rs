@@ -1,34 +1,34 @@
-//! Ende-zu-Ende-Test mit einem echten uinput-Gerät.
+//! End-to-end tests with a real uinput device.
 //!
-//! Das Gerät wird per EVIOCGRAB exklusiv vom Test belegt, bevor ein Klick
-//! erzeugt wird – die Klicks erreichen also nie den Desktop. Ohne Zugriff auf
-//! /dev/uinput bzw. /dev/input wird der Test übersprungen.
+//! The test grabs the device exclusively (EVIOCGRAB) before any click is
+//! emitted, so no click ever reaches the desktop. Without access to
+//! /dev/uinput or /dev/input the tests are skipped.
 
 use evdev::{Device, EventType, KeyCode};
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
-use tuxhub_autoclicker::clicker::{Clicker, Config, Mode};
-use tuxhub_autoclicker::device::{Button, DEVICE_NAME, Mouse};
+use tuxly_autoclicker::clicker::{Clicker, Config, Mode};
+use tuxly_autoclicker::device::{Button, DEVICE_NAME, Mouse};
 
-/// Legt Maus + gegrabbten Leser an und sammelt Tasten-Events (Code, Wert).
+/// Creates the mouse and a grabbed reader that collects key events (code, value).
 fn setup() -> Option<(Mouse, mpsc::Receiver<(u16, i32)>)> {
     let mut mouse = match Mouse::new() {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("übersprungen: {e}");
+            eprintln!("skipped: {e}");
             return None;
         }
     };
     let mut dev = match open_own_node(&mut mouse) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("übersprungen: {e}");
+            eprintln!("skipped: {e}");
             return None;
         }
     };
     dev.grab()
-        .expect("Grab muss klappen, sonst würden echte Klicks ankommen");
+        .expect("the grab must succeed, otherwise real clicks would reach the desktop");
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         while let Ok(events) = dev.fetch_events() {
@@ -42,12 +42,12 @@ fn setup() -> Option<(Mouse, mpsc::Receiver<(u16, i32)>)> {
     Some((mouse, rx))
 }
 
-/// Öffnet den event-Knoten unseres virtuellen Geräts. Prüft den Namen, damit
-/// nie versehentlich ein echtes Gerät gegrabbt wird, und wartet kurz, bis udev
-/// die Rechte des frisch angelegten Knotens gesetzt hat.
+/// Opens the event node of the virtual device. Checks the name so a physical
+/// device is never grabbed by accident, and waits until udev has applied the
+/// permissions of the new node.
 fn open_own_node(mouse: &mut Mouse) -> Result<Device, String> {
     let end = Instant::now() + Duration::from_secs(3);
-    let mut last_err = String::from("kein event-Knoten gefunden");
+    let mut last_err = String::from("no event node found");
     while Instant::now() < end {
         let nodes = mouse.dev_nodes().map_err(|e| e.to_string())?;
         for node in nodes.iter().filter(|n| {
@@ -57,7 +57,7 @@ fn open_own_node(mouse: &mut Mouse) -> Result<Device, String> {
             match Device::open(node) {
                 Ok(d) if d.name() == Some(DEVICE_NAME) => return Ok(d),
                 Ok(d) => {
-                    last_err = format!("{} ist {:?}, nicht unser Gerät", node.display(), d.name())
+                    last_err = format!("{} is {:?}, not the test device", node.display(), d.name())
                 }
                 Err(e) => last_err = format!("{}: {e}", node.display()),
             }
@@ -95,7 +95,7 @@ fn clicks_reach_device_and_stop_at_limit() {
     let evs = collect(&rx, 10, Duration::from_secs(3));
     let right = KeyCode::BTN_RIGHT.code();
     assert_eq!(evs, [(right, 1), (right, 0)].repeat(5));
-    // Nach dem Limit kommt nichts mehr.
+    // Nothing follows after the limit.
     assert!(collect(&rx, 1, Duration::from_millis(200)).is_empty());
     assert!(!c.is_running());
 }
@@ -113,7 +113,7 @@ fn double_click_and_stop() {
     };
     c.start(&cfg, false);
     let evs = collect(&rx, 8, Duration::from_secs(3));
-    assert_eq!(evs.len(), 8, "2 Doppelklicks = 4 × drücken + loslassen");
+    assert_eq!(evs.len(), 8, "2 double clicks = 4 presses and releases");
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn hold_releases_on_stop() {
     c.stop();
     assert!(
         t.elapsed() < Duration::from_millis(500),
-        "Stopp muss sofort greifen"
+        "stop must take effect immediately"
     );
     assert_eq!(collect(&rx, 1, Duration::from_secs(2)), [(left, 0)]);
 }

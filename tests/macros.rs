@@ -1,20 +1,20 @@
-//! Makro-Tests mit echten uinput-Geräten.
+//! Macro tests with real uinput devices.
 //!
-//! - Wiedergabe: Das Makro-Gerät wird per EVIOCGRAB exklusiv belegt – nichts
-//!   erreicht den Desktop.
-//! - Aufnahme: Grab ist hier nicht möglich (der Recorder muss mitlesen). Der
-//!   Test sendet deshalb nur F24 auf einem eigenen Testgerät und der Recorder
-//!   liest ausschließlich dieses Gerät.
+//! - Playback: the macro device is grabbed exclusively (EVIOCGRAB), so nothing
+//!   reaches the desktop.
+//! - Recording: a grab is not possible because the recorder must read the
+//!   device. The test therefore emits only F24 on a dedicated test device, and
+//!   the recorder reads only that device.
 //!
-//! Ohne Zugriff auf /dev/uinput bzw. /dev/input werden die Tests übersprungen.
+//! Without access to /dev/uinput or /dev/input the tests are skipped.
 
 use evdev::uinput::VirtualDevice;
 use evdev::{AttributeSet, Device, EventSummary, EventType, InputEvent, KeyCode, RelativeAxisCode};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
-use tuxhub_autoclicker::macros::{self, Action, Macro, Step};
-use tuxhub_autoclicker::player::{Keyboard, PLAYER_DEVICE_NAME, PlayStatus, Player};
-use tuxhub_autoclicker::recorder::Recorder;
+use tuxly_autoclicker::macros::{self, Action, Macro, Step};
+use tuxly_autoclicker::player::{Keyboard, PLAYER_DEVICE_NAME, PlayStatus, Player};
+use tuxly_autoclicker::recorder::Recorder;
 
 #[derive(Debug, PartialEq)]
 enum Got {
@@ -22,7 +22,7 @@ enum Got {
     Rel(u16, i32),
 }
 
-/// Öffnet den event-Knoten mit genau diesem Namen (wartet auf udev-Rechte).
+/// Opens the event node with exactly this name (waits for udev permissions).
 fn open_named(nodes: impl Fn() -> Vec<std::path::PathBuf>, name: &str) -> Option<Device> {
     let end = Instant::now() + Duration::from_secs(3);
     while Instant::now() < end {
@@ -49,7 +49,7 @@ fn player_with_grabbed_reader() -> Option<(Player, mpsc::Receiver<Got>, mpsc::Re
     let kb = match Keyboard::new() {
         Ok(k) => k,
         Err(e) => {
-            eprintln!("übersprungen: {e}");
+            eprintln!("skipped: {e}");
             return None;
         }
     };
@@ -59,11 +59,11 @@ fn player_with_grabbed_reader() -> Option<(Player, mpsc::Receiver<Got>, mpsc::Re
         move || kb2.lock().unwrap().dev_nodes().unwrap_or_default(),
         PLAYER_DEVICE_NAME,
     ) else {
-        eprintln!("übersprungen: Makro-Gerät nicht lesbar");
+        eprintln!("skipped: the macro device is not readable");
         return None;
     };
     dev.grab()
-        .expect("Grab muss klappen, sonst kämen echte Eingaben an");
+        .expect("the grab must succeed, otherwise real input would reach the desktop");
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         while let Ok(evs) = dev.fetch_events() {
@@ -161,7 +161,7 @@ fn plays_keys_moves_and_scroll_twice() {
     assert_eq!(&got[5..], &round);
     assert!(
         collect(&rx, 1, Duration::from_millis(200)).is_empty(),
-        "nach 2 Runden ist Schluss"
+        "playback ends after 2 rounds"
     );
 }
 
@@ -197,7 +197,7 @@ fn stop_releases_held_keys() {
     assert_eq!(
         collect(&rx, 1, Duration::from_secs(2)),
         [Got::Key(shift, 0)],
-        "Shift muss losgelassen werden"
+        "Shift must be released"
     );
 }
 
@@ -229,7 +229,7 @@ fn endless_loop_stops() {
     assert_eq!(
         collect(&rx, 20, Duration::from_secs(3)).len(),
         20,
-        "läuft endlos weiter"
+        "keeps playing endlessly"
     );
     player.stop();
     assert!(!player.is_playing());
@@ -237,14 +237,14 @@ fn endless_loop_stops() {
         .pop()
         .unwrap();
     assert!(
-        last.playing.is_none() && last.text.contains("gestoppt"),
+        last.playing.is_none() && last.phase == "stopped",
         "{last:?}"
     );
 }
 
 #[test]
 fn records_from_test_device_only() {
-    const NAME: &str = "tuxhub-recorder-test";
+    const NAME: &str = "tuxly-recorder-test";
     let f24 = KeyCode::KEY_F24;
     let mut fake = match VirtualDevice::builder().and_then(|b| {
         b.name(NAME)
@@ -257,18 +257,18 @@ fn records_from_test_device_only() {
     }) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("übersprungen: {e}");
+            eprintln!("skipped: {e}");
             return;
         }
     };
-    // Warten, bis udev den Knoten lesbar gemacht hat.
+    // Wait until udev has made the node readable.
     let nodes: Vec<_> = fake
         .enumerate_dev_nodes_blocking()
         .unwrap()
         .flatten()
         .collect();
     if open_named(|| nodes.clone(), NAME).is_none() {
-        eprintln!("übersprungen: Testgerät nicht lesbar (Gruppe input?)");
+        eprintln!("skipped: the test device is not readable (member of the input group?)");
         return;
     }
 
@@ -299,7 +299,7 @@ fn records_from_test_device_only() {
     );
     assert!(
         (100..=250).contains(&steps[1].delay_ms),
-        "Zeitabstand {} ms",
+        "delay was {} ms",
         steps[1].delay_ms
     );
 }

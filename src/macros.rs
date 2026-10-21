@@ -1,7 +1,7 @@
-//! Makros: Format, Speicherung und Umwandlung aufgenommener Eingaben.
+//! Macros: format, storage and conversion of recorded input.
 //!
-//! Ein Makro ist eine Liste von Schritten. Jeder Schritt wartet erst
-//! `delay_ms` und führt dann seine Aktion aus.
+//! A macro is a list of steps. Each step first waits `delay_ms` and then
+//! performs its action.
 
 use evdev::KeyCode;
 use serde::{Deserialize, Serialize};
@@ -20,13 +20,13 @@ pub struct Step {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Action {
-    /// Taste oder Maustaste drücken (`down = true`) bzw. loslassen
+    /// Press (`down = true`) or release a key or mouse button
     Key { code: u16, down: bool },
-    /// Relative Mausbewegung
+    /// Relative mouse motion
     Move { dx: i32, dy: i32 },
-    /// Mausrad
+    /// Mouse wheel
     Scroll { dx: i32, dy: i32 },
-    /// Nur warten
+    /// Wait only
     Wait,
 }
 
@@ -36,13 +36,13 @@ pub struct Macro {
     pub name: String,
     #[serde(default)]
     pub steps: Vec<Step>,
-    /// Wiederholungen, 0 = endlos
+    /// Number of repetitions, 0 = endless
     #[serde(default = "one")]
     pub repeat: u32,
-    /// Abspielgeschwindigkeit, 1.0 = original
+    /// Playback speed, 1.0 = original
     #[serde(default = "one_f")]
     pub speed: f64,
-    /// Globaler Hotkey (XDG-Format, z. B. `CTRL+F1`)
+    /// Global hotkey in XDG format, for example `CTRL+F1`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shortcut: Option<String>,
 }
@@ -61,23 +61,20 @@ impl Macro {
 
     pub fn validate(&mut self) -> Result<(), String> {
         if !valid_id(&self.id) {
-            return Err(format!("ungültige Makro-ID {:?}", self.id));
+            return Err(format!("invalid macro id {:?}", self.id));
         }
         self.name = self.name.trim().to_string();
         if self.name.is_empty() {
             self.name = self.id.clone();
         }
         if !(0.1..=10.0).contains(&self.speed) {
-            return Err("Geschwindigkeit muss zwischen 0,1 und 10 liegen".into());
+            return Err("the speed must be between 0.1 and 10".into());
         }
         for (i, s) in self.steps.iter().enumerate() {
             if let Action::Key { code, .. } = s.action
                 && !playable_key(code)
             {
-                return Err(format!(
-                    "Schritt {}: Taste {code} wird nicht unterstützt",
-                    i + 1
-                ));
+                return Err(format!("step {}: key code {code} is not supported", i + 1));
             }
         }
         if let Some(s) = self
@@ -88,7 +85,7 @@ impl Macro {
             && !safe_trigger(s)
         {
             return Err(format!(
-                "Hotkey {s:?} ist nicht erlaubt – Buchstaben/Zahlen nur mit Strg, Alt oder Super (z. B. CTRL+F1)"
+                "hotkey {s:?} is not allowed: letters and digits require Ctrl, Alt or Super (for example CTRL+F1)"
             ));
         }
         self.shortcut = self
@@ -100,7 +97,7 @@ impl Macro {
     }
 }
 
-/// Tasten, die das Wiedergabe-Gerät erzeugen kann: normale Tastatur plus Maustasten.
+/// Keys the playback device can emit: a standard keyboard plus mouse buttons.
 pub fn playable_key(code: u16) -> bool {
     (1..=248).contains(&code) || (0x110..=0x117).contains(&code)
 }
@@ -114,7 +111,7 @@ pub fn key_name(code: u16) -> String {
     }
 }
 
-/// Alle abspielbaren Tasten mit Namen – für den Editor.
+/// All playable keys with their names, for the editor.
 pub fn all_keys() -> Vec<(u16, String)> {
     (1..=248u16)
         .chain(0x110..=0x117)
@@ -123,11 +120,11 @@ pub fn all_keys() -> Vec<(u16, String)> {
         .collect()
 }
 
-/// Prüft einen Hotkey im XDG-Format (`CTRL+SHIFT+q`, `F7`, …).
+/// Validates a hotkey in XDG format (`CTRL+SHIFT+q`, `F7`, ...).
 ///
-/// Tasten, die man zum Tippen oder Spielen braucht (Buchstaben, Zahlen,
-/// Leertaste, Escape, Enter, …), sind nur mit Strg/Alt/Logo erlaubt – sonst
-/// würden sie systemweit abgefangen.
+/// Keys needed for typing or playing (letters, digits, space, Escape, Enter,
+/// ...) are only allowed together with Ctrl, Alt or Super; otherwise they
+/// would be captured system-wide.
 pub fn safe_trigger(t: &str) -> bool {
     if t.is_empty()
         || t.len() > 64
@@ -170,7 +167,7 @@ pub fn valid_id(id: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
-/// Macht aus einem Namen eine Datei-taugliche ID.
+/// Turns a name into an id that is safe to use as a file name.
 pub fn slug(name: &str) -> String {
     let mut s = String::new();
     for c in name.to_lowercase().chars() {
@@ -188,23 +185,23 @@ pub fn slug(name: &str) -> String {
         }
     }
     let s = s.trim_matches('-').chars().take(40).collect::<String>();
-    if s.is_empty() { "makro".into() } else { s }
+    if s.is_empty() { "macro".into() } else { s }
 }
 
-// ------------------------------------------------------------------ Speicher
+// ------------------------------------------------------------------- Storage
 
 pub struct Store {
     dir: PathBuf,
 }
 
 impl Store {
-    /// `$XDG_DATA_HOME/tuxhub-autoclicker/macros`
+    /// `$XDG_DATA_HOME/tuxly-autoclicker/macros`
     pub fn open() -> io::Result<Self> {
         let base = std::env::var_os("XDG_DATA_HOME")
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
-            .ok_or_else(|| io::Error::other("HOME nicht gesetzt"))?;
-        let dir = base.join("tuxhub-autoclicker/macros");
+            .ok_or_else(|| io::Error::other("HOME is not set"))?;
+        let dir = base.join("tuxly-autoclicker/macros");
         std::fs::create_dir_all(&dir)?;
         Ok(Self { dir })
     }
@@ -219,7 +216,7 @@ impl Store {
         if valid_id(id) {
             Ok(self.dir.join(format!("{id}.json")))
         } else {
-            Err(format!("ungültige Makro-ID {id:?}"))
+            Err(format!("invalid macro id {id:?}"))
         }
     }
 
@@ -237,8 +234,8 @@ impl Store {
 
     pub fn load(&self, id: &str) -> Result<Macro, String> {
         let s = std::fs::read_to_string(self.path(id)?)
-            .map_err(|_| format!("Makro {id:?} nicht gefunden"))?;
-        serde_json::from_str(&s).map_err(|e| format!("Makro {id:?} ist beschädigt: {e}"))
+            .map_err(|_| format!("macro {id:?} not found"))?;
+        serde_json::from_str(&s).map_err(|e| format!("macro {id:?} is damaged: {e}"))
     }
 
     pub fn save(&self, mut m: Macro) -> Result<Macro, String> {
@@ -252,7 +249,7 @@ impl Store {
         std::fs::remove_file(self.path(id)?).map_err(|e| e.to_string())
     }
 
-    /// Freie ID für einen neuen Namen.
+    /// Unused id for a new name.
     pub fn new_id(&self, name: &str) -> String {
         let base = slug(name);
         let mut id = base.clone();
@@ -265,9 +262,9 @@ impl Store {
     }
 }
 
-// --------------------------------------------------------- Aufnahme → Schritte
+// ------------------------------------------------------- Recording to steps
 
-/// Ein rohes, aufgenommenes Ereignis.
+/// A raw recorded event.
 #[derive(Debug, Clone, Copy)]
 pub struct RawEvent {
     pub time: SystemTime,
@@ -281,15 +278,16 @@ pub enum RawKind {
     Scroll { dx: i32, dy: i32 },
 }
 
-/// Mausbewegungen innerhalb dieses Fensters werden zusammengefasst.
+/// Mouse movements within this window are merged.
 const MERGE_MS: u32 = 8;
 
-/// Wandelt eine Aufnahme in Makro-Schritte um.
+/// Converts a recording into macro steps.
 ///
-/// - Loslassen ohne vorheriges Drücken am Anfang fliegt raus (z. B. der
-///   Hotkey, mit dem die Aufnahme gestartet wurde).
-/// - Drücken ohne Loslassen am Ende fliegt raus (z. B. der Stopp-Hotkey).
-/// - Mausbewegungen werden in kurzen Fenstern zusammengefasst.
+/// - Releases without a preceding press at the beginning are dropped (for
+///   example the hotkey that started the recording).
+/// - Presses without a release at the end are dropped (for example the hotkey
+///   that stopped the recording).
+/// - Mouse movements within short windows are merged.
 pub fn to_steps(raw: &[RawEvent]) -> Vec<Step> {
     let mut keep = vec![true; raw.len()];
 
@@ -316,7 +314,7 @@ pub fn to_steps(raw: &[RawEvent]) -> Vec<Step> {
 
     let mut steps: Vec<Step> = Vec::new();
     let mut last: Option<SystemTime> = None;
-    // Zeit seit Beginn der aktuellen Bewegungsgruppe
+    // Time since the start of the current movement group
     let mut group_ms = u32::MAX;
     for (ev, _) in raw.iter().zip(&keep).filter(|(_, k)| **k) {
         let delay = last
@@ -337,7 +335,7 @@ pub fn to_steps(raw: &[RawEvent]) -> Vec<Step> {
             *px += dx;
             *py += dy;
             group_ms += delay;
-            // Die Wartezeit des zusammengefassten Teils geht nicht verloren.
+            // Keep the delay of the merged part.
             if let Some(s) = steps.last_mut() {
                 s.delay_ms += delay;
             }
@@ -352,7 +350,7 @@ pub fn to_steps(raw: &[RawEvent]) -> Vec<Step> {
         let delay_ms = if steps.is_empty() { 0 } else { delay };
         steps.push(Step { delay_ms, action });
     }
-    // Mausbewegungen nach der letzten Taste sind meist der Weg zum Stopp-Knopf.
+    // Movements after the last key are usually the way to the stop button.
     if let Some(last_key) = steps
         .iter()
         .rposition(|s| matches!(s.action, Action::Key { .. }))
@@ -385,7 +383,7 @@ mod tests {
                     code: F9,
                     down: false,
                 },
-            ), // Start-Hotkey losgelassen
+            ), // release of the start hotkey
             ev(
                 100,
                 RawKind::Key {
@@ -406,7 +404,7 @@ mod tests {
                     code: F9,
                     down: true,
                 },
-            ), // Stopp-Hotkey gedrückt
+            ), // press of the stop hotkey
         ];
         let steps = to_steps(&raw);
         assert_eq!(
@@ -465,7 +463,7 @@ mod tests {
             ev(100, RawKind::Move { dx: 40, dy: 10 }),
         ];
         assert_eq!(to_steps(&raw).len(), 2);
-        // Reine Bewegungs-Makros bleiben erhalten.
+        // Macros that contain only movements are kept.
         assert_eq!(to_steps(&raw[2..]).len(), 1);
     }
 
@@ -505,9 +503,10 @@ mod tests {
 
     #[test]
     fn store_ids_and_slug() {
-        assert_eq!(slug("Mein Makro: Öffnen!"), "mein-makro-offnen");
-        assert_eq!(slug("!!!"), "makro");
-        let dir = std::env::temp_dir().join(format!("tuxhub-macros-{}", std::process::id()));
+        assert_eq!(slug("Open Inventory: Fast!"), "open-inventory-fast");
+        assert_eq!(slug("Öffnen"), "offnen");
+        assert_eq!(slug("!!!"), "macro");
+        let dir = std::env::temp_dir().join(format!("tuxly-macros-{}", std::process::id()));
         let store = Store::at(dir.clone());
         let id = store.new_id("Farm");
         store

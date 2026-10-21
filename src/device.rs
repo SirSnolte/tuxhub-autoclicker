@@ -1,15 +1,16 @@
-//! Virtuelle Maus über `/dev/uinput`.
+//! Virtual mouse through `/dev/uinput`.
 //!
-//! Der Kernel behandelt sie wie eine echte Maus – deshalb funktionieren die
-//! Klicks unter Wayland, X11 und in jedem Spiel.
+//! The kernel treats the device like a physical mouse, so clicks work on
+//! Wayland, X11 and in every game.
 
 use evdev::uinput::VirtualDevice;
 use evdev::{AttributeSet, EventType, InputEvent, KeyCode, RelativeAxisCode};
 use serde::{Deserialize, Serialize};
-use std::io;
+use std::io::{self, Write};
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 
-pub const DEVICE_NAME: &str = "tuxhub-autoclicker";
+pub const DEVICE_NAME: &str = "tuxly-autoclicker";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
@@ -37,7 +38,7 @@ impl Mouse {
     pub fn new() -> io::Result<Self> {
         let keys =
             AttributeSet::from_iter([KeyCode::BTN_LEFT, KeyCode::BTN_RIGHT, KeyCode::BTN_MIDDLE]);
-        // Ohne Bewegungsachsen erkennt libinput das Gerät nicht als Zeigegerät.
+        // Without motion axes, libinput does not treat the device as a pointer.
         let axes = AttributeSet::from_iter([
             RelativeAxisCode::REL_X,
             RelativeAxisCode::REL_Y,
@@ -53,7 +54,7 @@ impl Mouse {
         Ok(Self { dev })
     }
 
-    /// Pfade der `/dev/input/event*`-Knoten dieses Geräts.
+    /// Paths of the `/dev/input/event*` nodes of this device.
     pub fn dev_nodes(&mut self) -> io::Result<Vec<PathBuf>> {
         self.dev.enumerate_dev_nodes_blocking()?.collect()
     }
@@ -72,8 +73,8 @@ fn explain(e: io::Error) -> io::Error {
         io::Error::new(
             e.kind(),
             format!(
-                "Kein Zugriff auf /dev/uinput ({e}). Einmalig einrichten mit \
-                 `tuxhub-autoclicker setup` bzw. der Aktion „Zugriff einrichten“ im Hub."
+                "no access to /dev/uinput ({e}). Grant access once with \
+                 `tuxly-autoclicker setup` or the \"Set up access\" action in tuxly."
             ),
         )
     } else {
@@ -81,25 +82,31 @@ fn explain(e: io::Error) -> io::Error {
     }
 }
 
-/// udev-Regel, die dem angemeldeten Nutzer Zugriff auf `/dev/uinput` gibt.
-pub const UDEV_RULE_PATH: &str = "/etc/udev/rules.d/60-tuxhub-uinput.rules";
+/// udev rule that gives the logged-in user access to `/dev/uinput`.
+pub const UDEV_RULE_PATH: &str = "/etc/udev/rules.d/60-tuxly-uinput.rules";
 pub const UDEV_RULE: &str =
     "KERNEL==\"uinput\", SUBSYSTEM==\"misc\", TAG+=\"uaccess\", OPTIONS+=\"static_node=uinput\"\n";
 
-/// Richtet die udev-Regel per `pkexec` ein (fragt grafisch nach dem Passwort).
+/// Installs the udev rule with `pkexec`, which asks for the password in a
+/// graphical dialog. The rule is passed on standard input, not interpolated
+/// into the shell command.
 pub fn setup_access() -> io::Result<()> {
     let script = format!(
-        "printf '%s' '{UDEV_RULE}' > {UDEV_RULE_PATH} && modprobe uinput && \
+        "cat > {UDEV_RULE_PATH} && modprobe uinput && \
          udevadm control --reload-rules && udevadm trigger --name-match=uinput"
     );
-    let status = std::process::Command::new("pkexec")
+    let mut child = Command::new("pkexec")
         .args(["sh", "-c", &script])
-        .status()?;
-    if status.success() {
+        .stdin(Stdio::piped())
+        .spawn()?;
+    child
+        .stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(UDEV_RULE.as_bytes())?;
+    if child.wait()?.success() {
         Ok(())
     } else {
-        Err(io::Error::other(
-            "Einrichtung abgebrochen oder fehlgeschlagen",
-        ))
+        Err(io::Error::other("the setup was cancelled or failed"))
     }
 }

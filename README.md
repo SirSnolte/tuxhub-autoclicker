@@ -1,56 +1,80 @@
-# tuxhub-autoclicker
+# tuxly-autoclicker
 
-Autoclicker für Linux – funktioniert unter **Wayland und X11** und in jedem
-Spiel, weil die Klicks über ein virtuelles Eingabegerät (`/dev/uinput`) direkt
-vom Kernel kommen.
+Autoclicker and keyboard and mouse macros for Linux. Clicks and macro playback
+use a virtual input device (`/dev/uinput`), so they work on Wayland and X11
+and in every application.
 
-Eigenständig nutzbar oder bequem im [tuxhub](https://github.com/SirSnolte/tuxhub)
-(Einstellungen, Start/Stopp, globaler Hotkey F8).
+The tool works on its own from the command line and integrates with
+[tuxly](https://github.com/SirSnolte/tuxly), which provides a graphical
+interface, settings and global hotkeys.
 
-> In Online-Spielen mit Anti-Cheat kann ein Autoclicker gegen die
-> Nutzungsbedingungen verstoßen. Nutzung auf eigenes Risiko.
+> Automated input can violate the terms of service of online games, in
+> particular games with anti-cheat software. Use it at your own risk.
 
-## Funktionen
+## Features
 
-- Linke, rechte oder mittlere Maustaste
-- Einzelklick, Doppelklick oder Gedrückthalten
-- Intervall ab 1 ms, zufällige Abweichung (Jitter)
-- Klick-Limit und Startverzögerung
-- **Makros:** Tastatur und Maus aufnehmen (F9), abspielen mit Wiederholungen
-  und Geschwindigkeit, im Editor Schritte und Wartezeiten bearbeiten, eigener
-  Hotkey pro Makro
-- **F10** stoppt alles sofort; beim Stopp werden gedrückte Tasten losgelassen
-- Optionale eigene **Stopp-Taste** für den Klicker (z. B. `CTRL+q` oder `F7`),
-  direkt in der Oberfläche festlegbar. Tasten, die man zum Tippen braucht,
-  gehen nur mit Strg/Alt/Super – sonst würden sie systemweit abgefangen.
+- Left, right or middle mouse button; single click, double click or hold
+- Interval from 1 ms, random variation, click limit and start delay
+- Macros: record keyboard and mouse input, play it back with repetitions and
+  adjustable speed, and edit steps and delays
+- Global hotkeys in tuxly: F8 starts or stops clicking, F9 starts or stops a
+  recording, F10 stops everything. Each macro and the clicker's stop action
+  can have their own hotkey.
+- Stopping always releases all pressed keys and buttons.
 
-## Kommandozeile
+## Installation
+
+Install it from the workshop in tuxly, or download the archive from the
+[latest release](https://github.com/SirSnolte/tuxly-autoclicker/releases/latest)
+and extract it.
+
+### Permissions
+
+Creating virtual input devices requires write access to `/dev/uinput`. Many
+systems grant it already, for example when Steam is installed. Otherwise run:
 
 ```bash
-tuxhub-autoclicker click --interval 100 --button left --delay 3
-tuxhub-autoclicker click -i 50 -m double -n 200
-tuxhub-autoclicker record "Erz farmen"     # Strg+C beendet die Aufnahme
-tuxhub-autoclicker play "Erz farmen" -r 10 -s 1.5
-tuxhub-autoclicker macros
-tuxhub-autoclicker setup
+tuxly-autoclicker setup
 ```
 
-Makros liegen als JSON in `~/.local/share/tuxhub-autoclicker/macros/`.
-Zum Aufnehmen braucht dein Nutzer Lesezugriff auf `/dev/input` (Gruppe
-`input`). Gelesen wird nur während einer Aufnahme – trotzdem keine Passwörter
-eintippen, solange sie läuft.
+This installs a udev rule that grants access to the logged-in user and asks
+for your password once.
 
-`Strg+C` stoppt sofort. `setup` richtet einmalig eine udev-Regel ein, damit
-der angemeldete Nutzer `/dev/uinput` verwenden darf (fragt nach dem Passwort).
-Wer Steam installiert hat, hat diesen Zugriff meist schon.
+Recording macros requires read access to `/dev/input`, which members of the
+`input` group have:
 
-## Bauen
+```bash
+sudo usermod -aG input "$USER"   # log out and in again afterwards
+```
+
+Input devices are read only while a recording is active. Every key is stored
+during a recording, so do not type passwords while recording.
+
+## Command line
+
+```bash
+tuxly-autoclicker click --interval 100 --button left --delay 3
+tuxly-autoclicker click -i 50 -m double -n 200
+tuxly-autoclicker record "Open inventory"        # Ctrl+C ends the recording
+tuxly-autoclicker play "Open inventory" -r 10 -s 1.5
+tuxly-autoclicker macros
+```
+
+Ctrl+C stops clicking and playback immediately. Macros are stored as JSON in
+`~/.local/share/tuxly-autoclicker/macros/`.
+
+## Building
 
 ```bash
 cargo build --release
-cargo test -- --test-threads=1   # Geräte-Tests: Wiedergabe exklusiv gegrabbt, Aufnahme nur über F24 eines Testgeräts
+cargo test -- --test-threads=1
 ```
 
-## Lizenz
+The device tests create virtual input devices. Playback tests grab their
+device exclusively, so no input reaches the desktop. The recording test emits
+only F24 on a dedicated test device. Tests are skipped when the required
+permissions are missing.
+
+## License
 
 MIT
