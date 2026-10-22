@@ -8,8 +8,8 @@ use evdev::{Device, EventType, KeyCode};
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
-use tuxly_autoclicker::clicker::{Clicker, Config, Mode};
-use tuxly_autoclicker::device::{Button, DEVICE_NAME, Mouse};
+use tuxhub_autoclicker::clicker::{Clicker, Config, Mode};
+use tuxhub_autoclicker::device::{Button, DEVICE_NAME, Mouse};
 
 /// Creates the mouse and a grabbed reader that collects key events (code, value).
 fn setup() -> Option<(Mouse, mpsc::Receiver<(u16, i32)>)> {

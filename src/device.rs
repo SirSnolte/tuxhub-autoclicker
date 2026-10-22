@@ -10,7 +10,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-pub const DEVICE_NAME: &str = "tuxly-autoclicker";
+pub const DEVICE_NAME: &str = "tuxhub-autoclicker";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
@@ -74,7 +74,7 @@ fn explain(e: io::Error) -> io::Error {
             e.kind(),
             format!(
                 "no access to /dev/uinput ({e}). Grant access once with \
-                 `tuxly-autoclicker setup` or the \"Set up access\" action in tuxly."
+                 `tuxhub-autoclicker setup` or the \"Set up access\" action in tuxhub."
             ),
         )
     } else {
@@ -83,7 +83,7 @@ fn explain(e: io::Error) -> io::Error {
 }
 
 /// udev rule that gives the logged-in user access to `/dev/uinput`.
-pub const UDEV_RULE_PATH: &str = "/etc/udev/rules.d/60-tuxly-uinput.rules";
+pub const UDEV_RULE_PATH: &str = "/etc/udev/rules.d/60-tuxhub-uinput.rules";
 pub const UDEV_RULE: &str =
     "KERNEL==\"uinput\", SUBSYSTEM==\"misc\", TAG+=\"uaccess\", OPTIONS+=\"static_node=uinput\"\n";
 

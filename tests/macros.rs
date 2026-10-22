@@ -12,9 +12,9 @@ use evdev::uinput::VirtualDevice;
 use evdev::{AttributeSet, Device, EventSummary, EventType, InputEvent, KeyCode, RelativeAxisCode};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
-use tuxly_autoclicker::macros::{self, Action, Macro, Step};
-use tuxly_autoclicker::player::{Keyboard, PLAYER_DEVICE_NAME, PlayStatus, Player};
-use tuxly_autoclicker::recorder::Recorder;
+use tuxhub_autoclicker::macros::{self, Action, Macro, Step};
+use tuxhub_autoclicker::player::{Keyboard, PLAYER_DEVICE_NAME, PlayStatus, Player};
+use tuxhub_autoclicker::recorder::Recorder;
 
 #[derive(Debug, PartialEq)]
 enum Got {
@@ -244,7 +244,7 @@ fn endless_loop_stops() {
 
 #[test]
 fn records_from_test_device_only() {
-    const NAME: &str = "tuxly-recorder-test";
+    const NAME: &str = "tuxhub-recorder-test";
     let f24 = KeyCode::KEY_F24;
     let mut fake = match VirtualDevice::builder().and_then(|b| {
         b.name(NAME)

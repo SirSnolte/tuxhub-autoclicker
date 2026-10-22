@@ -1,11 +1,11 @@
-# tuxly-autoclicker
+# tuxhub-autoclicker
 
 Autoclicker and keyboard and mouse macros for Linux. Clicks and macro playback
 use a virtual input device (`/dev/uinput`), so they work on Wayland and X11
 and in every application.
 
 The tool works on its own from the command line and integrates with
-[tuxly](https://github.com/SirSnolte/tuxly), which provides a graphical
+[tuxhub](https://github.com/SirSnolte/tuxhub), which provides a graphical
 interface, settings and global hotkeys.
 
 > Automated input can violate the terms of service of online games, in
@@ -17,15 +17,15 @@ interface, settings and global hotkeys.
 - Interval from 1 ms, random variation, click limit and start delay
 - Macros: record keyboard and mouse input, play it back with repetitions and
   adjustable speed, and edit steps and delays
-- Global hotkeys in tuxly: F8 starts or stops clicking, F9 starts or stops a
+- Global hotkeys in tuxhub: F8 starts or stops clicking, F9 starts or stops a
   recording, F10 stops everything. Each macro and the clicker's stop action
   can have their own hotkey.
 - Stopping always releases all pressed keys and buttons.
 
 ## Installation
 
-Install it from the workshop in tuxly, or download the archive from the
-[latest release](https://github.com/SirSnolte/tuxly-autoclicker/releases/latest)
+Install it from the workshop in tuxhub, or download the archive from the
+[latest release](https://github.com/SirSnolte/tuxhub-autoclicker/releases/latest)
 and extract it.
 
 ### Permissions
@@ -34,7 +34,7 @@ Creating virtual input devices requires write access to `/dev/uinput`. Many
 systems grant it already, for example when Steam is installed. Otherwise run:
 
 ```bash
-tuxly-autoclicker setup
+tuxhub-autoclicker setup
 ```
 
 This installs a udev rule that grants access to the logged-in user and asks
@@ -53,15 +53,15 @@ during a recording, so do not type passwords while recording.
 ## Command line
 
 ```bash
-tuxly-autoclicker click --interval 100 --button left --delay 3
-tuxly-autoclicker click -i 50 -m double -n 200
-tuxly-autoclicker record "Open inventory"        # Ctrl+C ends the recording
-tuxly-autoclicker play "Open inventory" -r 10 -s 1.5
-tuxly-autoclicker macros
+tuxhub-autoclicker click --interval 100 --button left --delay 3
+tuxhub-autoclicker click -i 50 -m double -n 200
+tuxhub-autoclicker record "Open inventory"        # Ctrl+C ends the recording
+tuxhub-autoclicker play "Open inventory" -r 10 -s 1.5
+tuxhub-autoclicker macros
 ```
 
 Ctrl+C stops clicking and playback immediately. Macros are stored as JSON in
-`~/.local/share/tuxly-autoclicker/macros/`.
+`~/.local/share/tuxhub-autoclicker/macros/`.
 
 ## Building
 

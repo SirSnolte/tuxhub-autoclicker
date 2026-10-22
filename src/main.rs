@@ -1,18 +1,18 @@
 use clap::{Parser, Subcommand};
 use std::sync::{Arc, Mutex};
-use tuxly_autoclicker::clicker::{Clicker, Config, Mode, Status};
-use tuxly_autoclicker::device::{Button, Mouse, UDEV_RULE_PATH, setup_access};
-use tuxly_autoclicker::macros::{self, Macro, Store};
-use tuxly_autoclicker::player::{Keyboard, PlayStatus, Player};
-use tuxly_autoclicker::recorder::Recorder;
+use tuxhub_autoclicker::clicker::{Clicker, Config, Mode, Status};
+use tuxhub_autoclicker::device::{Button, Mouse, UDEV_RULE_PATH, setup_access};
+use tuxhub_autoclicker::macros::{self, Macro, Store};
+use tuxhub_autoclicker::player::{Keyboard, PlayStatus, Player};
+use tuxhub_autoclicker::recorder::Recorder;
 
 /// Autoclicker and input macros for Linux. Works on Wayland and X11.
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-    /// tuxly mode: JSON-RPC over standard input and output (used by tuxly)
+    /// tuxhub mode: JSON-RPC over standard input and output (used by tuxhub)
     #[arg(long, hide = true)]
-    tuxly: bool,
+    tuxhub: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -68,8 +68,8 @@ enum Command {
 
 fn main() {
     let cli = Cli::parse();
-    let result = if cli.tuxly {
-        tuxly_autoclicker::rpc::serve()
+    let result = if cli.tuxhub {
+        tuxhub_autoclicker::rpc::serve()
     } else {
         match cli.command {
             Some(Command::Click {
@@ -233,7 +233,7 @@ fn play(name: &str, repeat: Option<u32>, speed: Option<f64>, delay: u64) -> std:
 fn list_macros() -> std::io::Result<()> {
     let list = store()?.list();
     if list.is_empty() {
-        println!("No macros yet. Record one with: tuxly-autoclicker record <name>");
+        println!("No macros yet. Record one with: tuxhub-autoclicker record <name>");
     }
     for m in list {
         println!(

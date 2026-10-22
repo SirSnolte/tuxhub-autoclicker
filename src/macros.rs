@@ -195,13 +195,13 @@ pub struct Store {
 }
 
 impl Store {
-    /// `$XDG_DATA_HOME/tuxly-autoclicker/macros`
+    /// `$XDG_DATA_HOME/tuxhub-autoclicker/macros`
     pub fn open() -> io::Result<Self> {
         let base = std::env::var_os("XDG_DATA_HOME")
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
             .ok_or_else(|| io::Error::other("HOME is not set"))?;
-        let dir = base.join("tuxly-autoclicker/macros");
+        let dir = base.join("tuxhub-autoclicker/macros");
         std::fs::create_dir_all(&dir)?;
         Ok(Self { dir })
     }
@@ -506,7 +506,7 @@ mod tests {
         assert_eq!(slug("Open Inventory: Fast!"), "open-inventory-fast");
         assert_eq!(slug("Öffnen"), "offnen");
         assert_eq!(slug("!!!"), "macro");
-        let dir = std::env::temp_dir().join(format!("tuxly-macros-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("tuxhub-macros-{}", std::process::id()));
         let store = Store::at(dir.clone());
         let id = store.new_id("Farm");
         store

@@ -1,4 +1,4 @@
-# Integration with tuxly (level 2). See https://github.com/SirSnolte/tuxly
+# Integration with tuxhub (level 2). See https://github.com/SirSnolte/tuxhub
 #
 # The interface in ui/ is localized and shows the usage notice itself, so the
 # manifest only declares settings, actions and default hotkeys.
@@ -11,8 +11,8 @@ description = "Automated clicking and keyboard and mouse macros for Wayland and 
 ui = "ui/index.html"
 
 [rpc]
-command = "tuxly-autoclicker"
-args = ["--tuxly"]
+command = "tuxhub-autoclicker"
+args = ["--tuxhub"]
 
 [[settings]]
 key = "interval_ms"

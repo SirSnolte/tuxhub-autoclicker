@@ -1,4 +1,4 @@
-//! tuxly mode: JSON-RPC over standard input and output, one message per line.
+//! tuxhub mode: JSON-RPC over standard input and output, one message per line.
 //!
 //! Methods:
 //! - `configure`, `status`, `shutdown`
@@ -8,7 +8,7 @@
 //! - `macros.list`, `macros.get`, `macros.save`, `macros.delete`,
 //!   `macros.play`, `macros.stop`, `record.start`, `record.stop`, `keys`
 //!
-//! Notifications sent to tuxly: `status` (clicker), `macro-status`,
+//! Notifications sent to tuxhub: `status` (clicker), `macro-status`,
 //! `macros-changed` and `shortcuts` (runtime hotkeys).
 
 use crate::clicker::{Clicker, Config, Phase, Status};
@@ -102,7 +102,7 @@ pub fn serve() -> std::io::Result<()> {
             });
         }
     }
-    // Standard input closed (tuxly exited): stop everything immediately.
+    // Standard input closed (tuxhub exited): stop everything immediately.
     st.panic();
     Ok(())
 }
@@ -160,7 +160,7 @@ impl State {
         }}));
     }
 
-    /// Reports the runtime hotkeys (stop key and macro hotkeys) to tuxly.
+    /// Reports the runtime hotkeys (stop key and macro hotkeys) to tuxhub.
     fn send_shortcuts(&self) {
         let stop = self.macro_cfg.stop_shortcut.trim();
         let stop = (!stop.is_empty() && macros::safe_trigger(stop))

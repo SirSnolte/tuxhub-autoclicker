@@ -11,7 +11,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-pub const PLAYER_DEVICE_NAME: &str = "tuxly-autoclicker-macro";
+pub const PLAYER_DEVICE_NAME: &str = "tuxhub-autoclicker-macro";
 
 pub struct Keyboard {
     dev: VirtualDevice,

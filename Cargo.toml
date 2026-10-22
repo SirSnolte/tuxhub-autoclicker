@@ -1,8 +1,8 @@
 [package]
-name = "tuxly-autoclicker"
+name = "tuxhub-autoclicker"
 version = "0.3.0"
 edition = "2024"
-description = "Autoclicker and input macros for Linux (Wayland and X11), standalone or integrated in tuxly"
+description = "Autoclicker and input macros for Linux (Wayland and X11), standalone or integrated in tuxhub"
 license = "MIT"
 authors = ["SirSnolte"]
 

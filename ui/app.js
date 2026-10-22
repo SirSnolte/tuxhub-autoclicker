@@ -1,5 +1,5 @@
-// Interface of the autoclicker inside tuxly. Talks to the tool process through
-// the tuxly bridge (window.tuxly). Texts follow the language reported by tuxly.
+// Interface of the autoclicker inside tuxhub. Talks to the tool process through
+// the tuxhub bridge (window.tuxhub). Texts follow the language reported by tuxhub.
 
 "use strict";
 
@@ -242,7 +242,7 @@ function rerender() {
   if (draft) $("ed-title").textContent = draft.id ? t("editor.titleEdit") : t("editor.titleNew");
 }
 
-tuxly.on("locale", ({ locale: l }) => {
+tuxhub.on("locale", ({ locale: l }) => {
   locale = l === "de" ? "de" : "en";
   rerender();
 });
@@ -258,7 +258,7 @@ for (const b of document.querySelectorAll(".tabs button")) {
   };
 }
 for (const b of document.querySelectorAll("[data-action]")) {
-  b.onclick = () => tuxly.action(b.dataset.action).catch(fail);
+  b.onclick = () => tuxhub.action(b.dataset.action).catch(fail);
 }
 
 // ----------------------------------------------------------------- Clicker
@@ -279,7 +279,7 @@ let saveTimer;
 function save(key, value) {
   settings[key] = value;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => tuxly.saveSettings({ ...settings }).catch(fail), 300);
+  saveTimer = setTimeout(() => tuxhub.saveSettings({ ...settings }).catch(fail), 300);
 }
 
 function renderForm() {
@@ -322,7 +322,7 @@ function renderClickerStatus() {
   $("clicker-status").textContent = s ? t(`status.${s.phase}`, { clicks: s.clicks, seconds: s.seconds, error: s.error ?? "" }) : "";
 }
 
-tuxly.on("status", (s) => {
+tuxhub.on("status", (s) => {
   clickerStatus = s;
   renderClickerStatus();
 });
@@ -402,15 +402,15 @@ $("stop-set").onclick = async () => {
   if (!trigger) return;
   settings.stop_shortcut = trigger;
   showStopKey();
-  tuxly.saveSettings({ ...settings }).catch(fail);
+  tuxhub.saveSettings({ ...settings }).catch(fail);
 };
 $("stop-clear").onclick = () => {
   settings.stop_shortcut = "";
   showStopKey();
-  tuxly.saveSettings({ ...settings }).catch(fail);
+  tuxhub.saveSettings({ ...settings }).catch(fail);
 };
 
-tuxly
+tuxhub
   .getSettings()
   .then((s) => {
     settings = s;
@@ -427,7 +427,7 @@ let playing = null;
 let keys = [];
 let keyNames = new Map();
 
-tuxly.call("keys").then((list) => {
+tuxhub.call("keys").then((list) => {
   keys = list;
   keyNames = new Map(list);
   fillKeySelect();
@@ -448,7 +448,7 @@ function fillKeySelect() {
 }
 
 async function loadMacros() {
-  macros = await tuxly.call("macros.list").catch((e) => (fail(e), []));
+  macros = await tuxhub.call("macros.list").catch((e) => (fail(e), []));
   renderMacros();
 }
 
@@ -483,18 +483,18 @@ $("macro-rows").onclick = async (e) => {
   const b = e.target.closest("button");
   if (!b) return;
   try {
-    if (b.dataset.play) await tuxly.call("macros.play", { id: b.dataset.play });
-    if ("stop" in b.dataset) await tuxly.call("macros.stop");
-    if (b.dataset.edit) openEditor(await tuxly.call("macros.get", { id: b.dataset.edit }));
+    if (b.dataset.play) await tuxhub.call("macros.play", { id: b.dataset.play });
+    if ("stop" in b.dataset) await tuxhub.call("macros.stop");
+    if (b.dataset.edit) openEditor(await tuxhub.call("macros.get", { id: b.dataset.edit }));
     if (b.dataset.del) {
       const m = macros.find((x) => x.id === b.dataset.del);
-      if (confirm(t("macros.confirmDelete", { name: m.name }))) await tuxly.call("macros.delete", { id: m.id });
+      if (confirm(t("macros.confirmDelete", { name: m.name }))) await tuxhub.call("macros.delete", { id: m.id });
     }
   } catch (err) {
     fail(err);
   }
 };
-$("rec-btn").onclick = () => tuxly.action("record").catch(fail);
+$("rec-btn").onclick = () => tuxhub.action("record").catch(fail);
 $("new-btn").onclick = () => openEditor({ id: "", name: t("macros.defaultName"), steps: [], repeat: 1, speed: 1 });
 
 function renderMacroStatus() {
@@ -518,14 +518,14 @@ function renderMacroStatus() {
   el.classList.toggle("recording", recording);
 }
 
-tuxly.on("macro-status", (s) => {
+tuxhub.on("macro-status", (s) => {
   macroStatus = s;
   recording = !!s.recording;
   playing = s.playing ?? null;
   renderMacroStatus();
   renderMacros();
 });
-tuxly.on("macros-changed", loadMacros);
+tuxhub.on("macros-changed", loadMacros);
 
 // ------------------------------------------------------------------ Editor
 
@@ -634,7 +634,7 @@ $("ed-save").onclick = async () => {
   draft.speed = Number($("ed-speed").value) || 1;
   draft.shortcut = $("ed-shortcut").value.trim() || null;
   try {
-    await tuxly.call("macros.save", draft);
+    await tuxhub.call("macros.save", draft);
     closeEditor();
   } catch (e) {
     $("ed-error").textContent = e.message;
