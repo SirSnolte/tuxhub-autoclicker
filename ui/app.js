@@ -233,6 +233,21 @@ const fail = (e) => {
   $("error").classList.remove("hidden");
 };
 $("error-close").onclick = () => $("error").classList.add("hidden");
+
+// Notices stay hidden once dismissed. Storage can be unavailable; the notice
+// then only hides until the page is reloaded.
+for (const el of document.querySelectorAll("[data-dismiss]")) {
+  const key = `dismissed.${el.dataset.dismiss}`;
+  try {
+    if (localStorage.getItem(key)) el.classList.add("hidden");
+  } catch {}
+  el.querySelector("wa-button").onclick = () => {
+    el.classList.add("hidden");
+    try {
+      localStorage.setItem(key, "1");
+    } catch {}
+  };
+}
 const fmtMs = (ms) => (ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : ms + " ms");
 
 // Last notifications, kept so texts can be rebuilt when the language changes.

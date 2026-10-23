@@ -4,6 +4,13 @@ All notable changes are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- The anti-cheat warning and the recording privacy notice can be closed and
+  stay hidden afterwards.
+
 ## [0.3.0] - 2026-10-23
 
 First public release.

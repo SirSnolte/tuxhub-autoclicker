@@ -166,3 +166,13 @@ tr.playing td {
 #dialog-input {
   margin-top: var(--wa-space-s);
 }
+
+/* Dismissable notice: text on the left, close button on the right. */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--wa-space-s);
+}
+.notice > span {
+  flex: 1;
+}

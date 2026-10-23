@@ -12,7 +12,14 @@
   </head>
   <body>
     <main class="wa-stack">
-      <wa-callout variant="warning" data-i18n="notice.anticheat"></wa-callout>
+      <wa-callout variant="warning" data-dismiss="anticheat">
+        <div class="notice">
+          <span data-i18n="notice.anticheat"></span>
+          <wa-button size="s" appearance="plain">
+            <wa-icon name="xmark" library="system" variant="solid" data-i18n-label="error.dismiss"></wa-icon>
+          </wa-button>
+        </div>
+      </wa-callout>
 
       <wa-callout variant="danger" class="hidden" id="error" role="alert">
         <div class="wa-split">
@@ -77,7 +84,14 @@
               <p class="status-line" id="macro-status" aria-live="polite"></p>
             </wa-card>
 
-            <wa-callout variant="neutral" data-i18n="macros.privacy"></wa-callout>
+            <wa-callout variant="neutral" data-dismiss="privacy">
+              <div class="notice">
+                <span data-i18n="macros.privacy"></span>
+                <wa-button size="s" appearance="plain">
+                  <wa-icon name="xmark" library="system" variant="solid" data-i18n-label="error.dismiss"></wa-icon>
+                </wa-button>
+              </div>
+            </wa-callout>
 
             <wa-card class="table-card">
               <table>
