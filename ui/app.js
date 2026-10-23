@@ -103,6 +103,11 @@ const STRINGS = {
     "step.scrollSide": "Scroll sideways ({n})",
     "step.wait": "Wait",
     "mouse": "Mouse",
+    "macros.actions": "Actions",
+    "macros.deleteHint": "This cannot be undone.",
+    "editor.key": "Key",
+    "editor.apply": "Apply",
+    "error.dismiss": "Dismiss",
   },
   de: {
     "notice.anticheat":
@@ -203,6 +208,11 @@ const STRINGS = {
     "step.scrollSide": "Mausrad seitlich ({n})",
     "step.wait": "Warten",
     "mouse": "Maus",
+    "macros.actions": "Aktionen",
+    "macros.deleteHint": "Das lässt sich nicht rückgängig machen.",
+    "editor.key": "Taste",
+    "editor.apply": "Übernehmen",
+    "error.dismiss": "Schließen",
   },
 };
 
@@ -217,7 +227,12 @@ function t(key, vars = {}) {
 const $ = (id) => document.getElementById(id);
 const esc = (s) =>
   String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const fail = (e) => alert(e?.message ?? e);
+// Errors appear in the page instead of in a browser dialog.
+const fail = (e) => {
+  $("error-text").textContent = String(e?.message ?? e);
+  $("error").classList.remove("hidden");
+};
+$("error-close").onclick = () => $("error").classList.add("hidden");
 const fmtMs = (ms) => (ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : ms + " ms");
 
 // Last notifications, kept so texts can be rebuilt when the language changes.
@@ -228,7 +243,56 @@ function applyStaticTexts() {
   document.documentElement.lang = locale;
   for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
   for (const el of document.querySelectorAll("[data-i18n-title]")) el.title = t(el.dataset.i18nTitle);
+  for (const el of document.querySelectorAll("[data-i18n-label]")) el.label = t(el.dataset.i18nLabel);
+  for (const el of document.querySelectorAll("[data-i18n-aria-label]")) el.setAttribute("aria-label", t(el.dataset.i18nAriaLabel));
 }
+
+/**
+ * Asks in the page's own dialog instead of a browser dialog. Resolves to true
+ * (or the entered value when `value` is given) on confirmation, else null.
+ */
+function ask({ title, text = "", ok, danger = false, value = null }) {
+  const dialog = $("dialog");
+  const input = $("dialog-input");
+  dialog.label = title;
+  $("dialog-text").textContent = text;
+  $("dialog-text").classList.toggle("hidden", !text);
+  $("dialog-ok").textContent = ok;
+  $("dialog-ok").variant = danger ? "danger" : "brand";
+  input.classList.toggle("hidden", value === null);
+  if (value !== null) input.value = value;
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      $("dialog-ok").removeEventListener("click", onOk);
+      $("dialog-cancel").removeEventListener("click", onCancel);
+      dialog.removeEventListener("wa-hide", onHide);
+    };
+    const finish = (result) => {
+      cleanup();
+      dialog.open = false;
+      resolve(result);
+    };
+    const onOk = () => finish(value === null ? true : input.value);
+    const onCancel = () => finish(null);
+    // Escape, the close button or a click outside.
+    const onHide = (e) => {
+      if (e.target !== dialog) return;
+      cleanup();
+      resolve(null);
+    };
+    $("dialog-ok").addEventListener("click", onOk);
+    $("dialog-cancel").addEventListener("click", onCancel);
+    dialog.addEventListener("wa-hide", onHide);
+    dialog.open = true;
+  });
+}
+
+function applyTheme(dark) {
+  document.documentElement.classList.toggle("wa-dark", dark);
+  document.documentElement.classList.toggle("wa-light", !dark);
+}
+applyTheme(matchMedia("(prefers-color-scheme: dark)").matches);
+tuxhub.on("theme", ({ dark }) => applyTheme(dark));
 
 function rerender() {
   applyStaticTexts();
@@ -249,14 +313,9 @@ tuxhub.on("locale", ({ locale: l }) => {
 
 // ------------------------------------------------------------------- Tabs
 
-for (const b of document.querySelectorAll(".tabs button")) {
-  b.onclick = () => {
-    for (const x of document.querySelectorAll(".tabs button")) x.classList.toggle("active", x === b);
-    $("tab-clicker").classList.toggle("hidden", b.dataset.tab !== "clicker");
-    $("tab-macros").classList.toggle("hidden", b.dataset.tab !== "macros");
-    if (b.dataset.tab === "macros") loadMacros();
-  };
-}
+$("tabs").addEventListener("wa-tab-show", (e) => {
+  if (e.detail?.name === "macros") loadMacros();
+});
 for (const b of document.querySelectorAll("[data-action]")) {
   b.onclick = () => tuxhub.action(b.dataset.action).catch(fail);
 }
@@ -282,38 +341,48 @@ function save(key, value) {
   saveTimer = setTimeout(() => tuxhub.saveSettings({ ...settings }).catch(fail), 300);
 }
 
+function slotted(slot, text, className) {
+  return Object.assign(document.createElement("span"), { slot, textContent: text, className: className ?? "" });
+}
+
+// Each field is a settings row as in tuxhub (class "setting", see theme.css).
 function renderForm() {
   const form = $("clicker-form");
-  form.innerHTML = "";
+  form.replaceChildren();
   for (const f of FIELDS) {
-    const row = document.createElement("label");
-    row.className = "field";
-    const help = f.help ? `<small class="muted">${esc(t(`help.${f.key}`))}</small>` : "";
-    row.innerHTML = `<span>${esc(t(`field.${f.key}`))}${help}</span><span class="row"></span>`;
-    const ctl = row.lastChild;
+    const label = t(`field.${f.key}`);
+    const help = f.help ? t(`help.${f.key}`) : null;
     let input;
     if (f.type === "select") {
-      input = document.createElement("select");
-      for (const v of f.options) input.add(new Option(t(`${f.key}.${v}`), v));
+      input = document.createElement("wa-select");
+      input.append(slotted("label", label));
+      for (const v of f.options) {
+        input.append(Object.assign(document.createElement("wa-option"), { value: v, textContent: t(`${f.key}.${v}`) }));
+      }
       input.value = settings[f.key];
-      input.onchange = () => save(f.key, input.value);
+      input.addEventListener("change", () => save(f.key, input.value));
     } else if (f.type === "toggle") {
-      input = Object.assign(document.createElement("input"), { type: "checkbox", checked: !!settings[f.key] });
-      input.onchange = () => save(f.key, input.checked);
+      input = document.createElement("wa-switch");
+      input.append(label);
+      input.checked = !!settings[f.key];
+      input.addEventListener("change", () => save(f.key, input.checked));
     } else {
-      input = Object.assign(document.createElement("input"), { type: "number", min: f.min, max: f.max });
+      input = document.createElement("wa-input");
+      Object.assign(input, { type: "number", min: f.min, max: f.max, withoutSpinButtons: true });
+      input.append(slotted("label", label));
+      if (f.unit) input.append(slotted("end", f.unit, "muted"));
       input.value = settings[f.key];
-      input.onchange = () => {
+      input.addEventListener("change", () => {
         let n = Math.round(Number(input.value));
         if (!Number.isFinite(n)) n = f.min;
         n = Math.min(f.max, Math.max(f.min, n));
         input.value = n;
         save(f.key, n);
-      };
+      });
     }
-    ctl.append(input);
-    if (f.unit) ctl.append(Object.assign(document.createElement("span"), { className: "muted", textContent: f.unit }));
-    form.append(row);
+    input.classList.add("setting");
+    if (help) input.append(slotted("hint", help));
+    form.append(input);
   }
 }
 
@@ -384,7 +453,7 @@ function captureKey(button) {
       const r = toTrigger(e);
       if (r.wait) return;
       if (r.error) {
-        alert(r.error);
+        fail(r.error);
         return done(null);
       }
       done(r.trigger);
@@ -441,10 +510,13 @@ function keyLabel(code) {
 function fillKeySelect() {
   const sel = $("add-key");
   const current = sel.value || "30"; // KEY_A
-  sel.innerHTML = "";
   const sorted = [...keys].sort((a, b) => keyLabel(a[0]).localeCompare(keyLabel(b[0]), locale, { numeric: true }));
-  for (const [code] of sorted) sel.add(new Option(keyLabel(code), code));
-  sel.value = current;
+  sel.replaceChildren(
+    ...sorted.map(([code]) =>
+      Object.assign(document.createElement("wa-option"), { value: String(code), textContent: keyLabel(code) }),
+    ),
+  );
+  sel.value = String(current);
 }
 
 async function loadMacros() {
@@ -455,6 +527,7 @@ async function loadMacros() {
 function renderMacros() {
   $("empty").classList.toggle("hidden", macros.length > 0);
   $("rec-btn").textContent = recording ? t("macros.stopRecording") : t("macros.record");
+  $("rec-btn").variant = recording ? "danger" : "brand";
   $("macro-rows").innerHTML = macros
     .map((m) => {
       const repeat = m.repeat === 0 ? t("macros.endless") : t("macros.times", { count: m.repeat });
@@ -462,25 +535,25 @@ function renderMacros() {
       const hotkey = m.shortcut ? `<kbd>${esc(m.shortcut)}</kbd>` : '<span class="muted">-</span>';
       const control =
         playing === m.id
-          ? `<button class="small" data-stop>${esc(t("macros.stop"))}</button>`
-          : `<button class="small primary" data-play="${esc(m.id)}">${esc(t("macros.play"))}</button>`;
+          ? `<wa-button size="s" variant="danger" data-stop>${esc(t("macros.stop"))}</wa-button>`
+          : `<wa-button size="s" variant="brand" data-play="${esc(m.id)}">${esc(t("macros.play"))}</wa-button>`;
       return `<tr class="${playing === m.id ? "playing" : ""}">
-        <td>${esc(m.name)}</td>
+        <td class="name">${esc(m.name)}</td>
         <td class="num">${m.steps}</td>
         <td class="num">${fmtMs(m.duration_ms)}</td>
         <td>${esc(repeat + speed)}</td>
         <td>${hotkey}</td>
-        <td class="num">
+        <td class="num actions">
           ${control}
-          <button class="small" data-edit="${esc(m.id)}">${esc(t("macros.edit"))}</button>
-          <button class="small danger" data-del="${esc(m.id)}">${esc(t("macros.delete"))}</button>
+          <wa-button size="s" appearance="outlined" data-edit="${esc(m.id)}">${esc(t("macros.edit"))}</wa-button>
+          <wa-button size="s" appearance="plain" variant="danger" data-del="${esc(m.id)}">${esc(t("macros.delete"))}</wa-button>
         </td></tr>`;
     })
     .join("");
 }
 
 $("macro-rows").onclick = async (e) => {
-  const b = e.target.closest("button");
+  const b = e.target.closest("wa-button");
   if (!b) return;
   try {
     if (b.dataset.play) await tuxhub.call("macros.play", { id: b.dataset.play });
@@ -488,7 +561,13 @@ $("macro-rows").onclick = async (e) => {
     if (b.dataset.edit) openEditor(await tuxhub.call("macros.get", { id: b.dataset.edit }));
     if (b.dataset.del) {
       const m = macros.find((x) => x.id === b.dataset.del);
-      if (confirm(t("macros.confirmDelete", { name: m.name }))) await tuxhub.call("macros.delete", { id: m.id });
+      const yes = await ask({
+        title: t("macros.confirmDelete", { name: m.name }),
+        text: t("macros.deleteHint"),
+        ok: t("macros.delete"),
+        danger: true,
+      });
+      if (yes) await tuxhub.call("macros.delete", { id: m.id });
     }
   } catch (err) {
     fail(err);
@@ -566,18 +645,23 @@ function describe(s) {
   return esc(s.type);
 }
 
+function iconButton(icon, label, data, disabled, variant = "neutral") {
+  return `<wa-button size="s" appearance="plain" variant="${variant}" ${data} title="${esc(label)}" ${disabled ? "disabled" : ""}>
+    <wa-icon name="${icon}" library="system" variant="solid" label="${esc(label)}"></wa-icon></wa-button>`;
+}
+
 function renderSteps() {
   const last = draft.steps.length - 1;
   $("step-rows").innerHTML = draft.steps
     .map(
       (s, i) => `<tr>
         <td class="muted">${i + 1}</td>
-        <td class="num"><input type="number" min="0" max="3600000" value="${s.delay_ms}" data-delay="${i}" aria-label="${esc(t("editor.delay"))}" /></td>
+        <td class="num"><wa-input size="s" type="number" without-spin-buttons min="0" max="3600000" value="${s.delay_ms}" data-delay="${i}" aria-label="${esc(t("editor.delay"))}"></wa-input></td>
         <td>${describe(s)}</td>
-        <td class="num">
-          <button class="icon" data-up="${i}" title="${esc(t("editor.moveUp"))}" aria-label="${esc(t("editor.moveUp"))}" ${i === 0 ? "disabled" : ""}>&uarr;</button>
-          <button class="icon" data-down="${i}" title="${esc(t("editor.moveDown"))}" aria-label="${esc(t("editor.moveDown"))}" ${i === last ? "disabled" : ""}>&darr;</button>
-          <button class="icon danger" data-rm="${i}" title="${esc(t("editor.remove"))}" aria-label="${esc(t("editor.remove"))}">&times;</button>
+        <td class="num actions">
+          ${iconButton("arrow-up", t("editor.moveUp"), `data-up="${i}"`, i === 0)}
+          ${iconButton("arrow-down", t("editor.moveDown"), `data-down="${i}"`, i === last)}
+          ${iconButton("xmark", t("editor.remove"), `data-rm="${i}"`, false, "danger")}
         </td></tr>`,
     )
     .join("");
@@ -591,7 +675,7 @@ $("step-rows").oninput = (e) => {
 };
 $("step-rows").onchange = () => renderSteps();
 $("step-rows").onclick = (e) => {
-  const b = e.target.closest("button");
+  const b = e.target.closest("wa-button");
   if (!b) return;
   const s = draft.steps;
   const swap = (a, c) => ([s[a], s[c]] = [s[c], s[a]]);
@@ -617,9 +701,10 @@ for (const b of document.querySelectorAll("[data-add]")) {
   };
 }
 
-$("ed-scale").onclick = () => {
-  const f = Number(prompt(t("editor.scalePrompt"), "1"));
-  if (!f || f <= 0) return;
+$("ed-scale").onclick = async () => {
+  const answer = await ask({ title: t("editor.scale"), text: t("editor.scalePrompt"), ok: t("editor.apply"), value: "1" });
+  const f = Number(answer);
+  if (!answer || !f || f <= 0) return;
   for (const s of draft.steps) s.delay_ms = Math.round(s.delay_ms * f);
   renderSteps();
 };

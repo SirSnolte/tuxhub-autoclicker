@@ -1,116 +1,158 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="wa-cloak">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Autoclicker</title>
+    <link rel="stylesheet" href="vendor/webawesome.css" />
+    <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="style.css" />
+    <script type="module" src="vendor/webawesome.js"></script>
     <script src="/__tuxhub/bridge.js"></script>
   </head>
   <body>
-    <p class="notice" data-i18n="notice.anticheat"></p>
+    <main class="wa-stack">
+      <wa-callout variant="warning" data-i18n="notice.anticheat"></wa-callout>
 
-    <div class="tabs" role="tablist">
-      <button role="tab" data-tab="clicker" class="active" data-i18n="tab.clicker"></button>
-      <button role="tab" data-tab="macros" data-i18n="tab.macros"></button>
-    </div>
-
-    <section id="tab-clicker">
-      <div class="row">
-        <button class="primary" data-action="start" data-i18n="clicker.start"></button>
-        <button data-action="stop" data-i18n="clicker.stop"></button>
-        <span class="muted" data-i18n="clicker.hotkeys"></span>
-      </div>
-      <p class="status" id="clicker-status" aria-live="polite"></p>
-      <div class="form" id="clicker-form"></div>
-      <div class="form">
-        <div class="field">
-          <span>
-            <span data-i18n="clicker.stopKey"></span>
-            <small class="muted" data-i18n="clicker.stopKeyHelp"></small>
-          </span>
-          <span class="row">
-            <kbd id="stop-key"></kbd>
-            <button class="small" id="stop-set" data-i18n="key.set"></button>
-            <button class="small danger" id="stop-clear" data-i18n="key.clear"></button>
-          </span>
+      <wa-callout variant="danger" class="hidden" id="error" role="alert">
+        <div class="wa-split">
+          <span id="error-text"></span>
+          <wa-button size="s" appearance="plain" id="error-close">
+            <wa-icon name="xmark" library="system" variant="solid" data-i18n-label="error.dismiss"></wa-icon>
+          </wa-button>
         </div>
-      </div>
-      <p class="muted setup">
-        <span data-i18n="clicker.setupHint"></span>
-        <button class="small" data-action="setup" data-i18n="clicker.setup"></button>
-      </p>
-    </section>
+      </wa-callout>
 
-    <section id="tab-macros" class="hidden">
-      <div id="list-view">
-        <div class="row between">
-          <div class="row">
-            <button class="primary" id="rec-btn"></button>
-            <span class="muted" data-i18n="macros.recordHint"></span>
+      <wa-tab-group id="tabs">
+        <wa-tab slot="nav" panel="clicker" data-i18n="tab.clicker"></wa-tab>
+        <wa-tab slot="nav" panel="macros" data-i18n="tab.macros"></wa-tab>
+
+        <wa-tab-panel name="clicker">
+          <div class="wa-stack">
+            <wa-card>
+              <div class="wa-split">
+                <div class="wa-stack wa-gap-3xs">
+                  <h2 class="status" id="clicker-status" aria-live="polite"></h2>
+                  <p class="muted small" data-i18n="clicker.hotkeys"></p>
+                </div>
+                <div class="wa-cluster wa-gap-xs">
+                  <wa-button variant="brand" data-action="start" data-i18n="clicker.start"></wa-button>
+                  <wa-button appearance="outlined" data-action="stop" data-i18n="clicker.stop"></wa-button>
+                </div>
+              </div>
+            </wa-card>
+
+            <wa-card>
+              <div id="clicker-form"></div>
+              <div class="setting-row">
+                <span class="text">
+                  <span data-i18n="clicker.stopKey"></span>
+                  <small class="muted" data-i18n="clicker.stopKeyHelp"></small>
+                </span>
+                <span class="wa-cluster wa-gap-xs wa-align-items-center">
+                  <kbd id="stop-key"></kbd>
+                  <wa-button size="s" appearance="outlined" id="stop-set" data-i18n="key.set"></wa-button>
+                  <wa-button size="s" appearance="plain" variant="danger" id="stop-clear" data-i18n="key.clear"></wa-button>
+                </span>
+              </div>
+            </wa-card>
+
+            <p class="muted small setup">
+              <span data-i18n="clicker.setupHint"></span>
+              <wa-button size="s" appearance="plain" variant="brand" data-action="setup" data-i18n="clicker.setup"></wa-button>
+            </p>
           </div>
-          <button id="new-btn" data-i18n="macros.new"></button>
-        </div>
-        <p class="status" id="macro-status" aria-live="polite"></p>
-        <p class="notice" data-i18n="macros.privacy"></p>
-        <table>
-          <thead>
-            <tr>
-              <th data-i18n="macros.name"></th>
-              <th class="num" data-i18n="macros.steps"></th>
-              <th class="num" data-i18n="macros.duration"></th>
-              <th data-i18n="macros.repeat"></th>
-              <th data-i18n="macros.hotkey"></th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="macro-rows"></tbody>
-        </table>
-        <p class="muted empty" id="empty" data-i18n="macros.empty"></p>
-      </div>
+        </wa-tab-panel>
 
-      <div id="editor" class="hidden card">
-        <div class="row between editor-head">
-          <h2 id="ed-title"></h2>
-          <div class="row">
-            <button id="ed-cancel" data-i18n="editor.cancel"></button>
-            <button class="primary" id="ed-save" data-i18n="editor.save"></button>
+        <wa-tab-panel name="macros">
+          <div class="wa-stack" id="list-view">
+            <wa-card>
+              <div class="wa-split">
+                <div class="wa-cluster wa-gap-s wa-align-items-center">
+                  <wa-button variant="brand" id="rec-btn"></wa-button>
+                  <span class="muted small" data-i18n="macros.recordHint"></span>
+                </div>
+                <wa-button appearance="outlined" id="new-btn" data-i18n="macros.new"></wa-button>
+              </div>
+              <p class="status-line" id="macro-status" aria-live="polite"></p>
+            </wa-card>
+
+            <wa-callout variant="neutral" data-i18n="macros.privacy"></wa-callout>
+
+            <wa-card class="table-card">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-i18n="macros.name"></th>
+                    <th class="num" data-i18n="macros.steps"></th>
+                    <th class="num" data-i18n="macros.duration"></th>
+                    <th data-i18n="macros.repeat"></th>
+                    <th data-i18n="macros.hotkey"></th>
+                    <th><span class="wa-visually-hidden" data-i18n="macros.actions"></span></th>
+                  </tr>
+                </thead>
+                <tbody id="macro-rows"></tbody>
+              </table>
+              <p class="muted empty" id="empty" data-i18n="macros.empty"></p>
+            </wa-card>
           </div>
-        </div>
-        <div class="grid2">
-          <label><span data-i18n="editor.name"></span><input id="ed-name" /></label>
-          <label><span data-i18n="editor.repeat"></span><input id="ed-repeat" type="number" min="0" max="100000" /></label>
-          <label><span data-i18n="editor.speed"></span><input id="ed-speed" type="number" min="0.1" max="10" step="0.1" /></label>
-          <label>
-            <span data-i18n="editor.hotkey"></span>
-            <span class="row"><input id="ed-shortcut" class="grow" /><button class="small" id="ed-capture" data-i18n="key.set"></button></span>
-          </label>
-        </div>
-        <div class="row add-row">
-          <span class="muted" data-i18n="editor.add"></span>
-          <select id="add-key" aria-label="Key"></select>
-          <button class="small" data-add="tap" data-i18n="editor.tap"></button>
-          <button class="small" data-add="down" data-i18n="editor.press"></button>
-          <button class="small" data-add="up" data-i18n="editor.release"></button>
-          <button class="small" data-add="wait" data-i18n="editor.wait"></button>
-          <button class="small" id="ed-scale" data-i18n="editor.scale" data-i18n-title="editor.scaleHelp"></button>
-        </div>
-        <div class="steps">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th class="num" data-i18n="editor.delay"></th>
-                <th data-i18n="editor.action"></th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="step-rows"></tbody>
-          </table>
-        </div>
-        <p class="muted" id="ed-summary"></p>
-        <p class="error" id="ed-error"></p>
+
+          <wa-card id="editor" class="hidden">
+            <div class="wa-stack">
+              <div class="wa-split">
+                <h2 id="ed-title"></h2>
+                <div class="wa-cluster wa-gap-xs">
+                  <wa-button appearance="outlined" id="ed-cancel" data-i18n="editor.cancel"></wa-button>
+                  <wa-button variant="brand" id="ed-save" data-i18n="editor.save"></wa-button>
+                </div>
+              </div>
+              <div class="grid2">
+                <wa-input id="ed-name" data-i18n-label="editor.name"></wa-input>
+                <wa-input id="ed-repeat" type="number" without-spin-buttons min="0" max="100000" data-i18n-label="editor.repeat"></wa-input>
+                <wa-input id="ed-speed" type="number" without-spin-buttons min="0.1" max="10" step="0.1" data-i18n-label="editor.speed"></wa-input>
+                <div class="hotkey-field">
+                  <wa-input id="ed-shortcut" data-i18n-label="editor.hotkey"></wa-input>
+                  <wa-button appearance="outlined" id="ed-capture" data-i18n="key.set"></wa-button>
+                </div>
+              </div>
+              <div class="wa-cluster wa-gap-xs wa-align-items-center add-row">
+                <span class="muted" data-i18n="editor.add"></span>
+                <wa-select id="add-key" size="s" data-i18n-aria-label="editor.key"></wa-select>
+                <wa-button size="s" appearance="outlined" data-add="tap" data-i18n="editor.tap"></wa-button>
+                <wa-button size="s" appearance="outlined" data-add="down" data-i18n="editor.press"></wa-button>
+                <wa-button size="s" appearance="outlined" data-add="up" data-i18n="editor.release"></wa-button>
+                <wa-button size="s" appearance="outlined" data-add="wait" data-i18n="editor.wait"></wa-button>
+                <wa-button size="s" appearance="plain" id="ed-scale" data-i18n="editor.scale" data-i18n-title="editor.scaleHelp"></wa-button>
+              </div>
+              <div class="steps">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th class="num" data-i18n="editor.delay"></th>
+                      <th data-i18n="editor.action"></th>
+                      <th><span class="wa-visually-hidden" data-i18n="macros.actions"></span></th>
+                    </tr>
+                  </thead>
+                  <tbody id="step-rows"></tbody>
+                </table>
+              </div>
+              <p class="muted small" id="ed-summary"></p>
+              <p class="error" id="ed-error" role="alert"></p>
+            </div>
+          </wa-card>
+        </wa-tab-panel>
+      </wa-tab-group>
+    </main>
+
+    <wa-dialog id="dialog">
+      <p id="dialog-text"></p>
+      <wa-input id="dialog-input" type="number" without-spin-buttons step="0.1" min="0.01" class="hidden"></wa-input>
+      <div slot="footer" class="wa-cluster wa-gap-xs dialog-buttons">
+        <wa-button appearance="outlined" id="dialog-cancel" data-i18n="editor.cancel"></wa-button>
+        <wa-button id="dialog-ok"></wa-button>
       </div>
-    </section>
+    </wa-dialog>
 
     <script src="app.js"></script>
   </body>
