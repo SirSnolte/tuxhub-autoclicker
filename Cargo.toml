@@ -1,6 +1,6 @@
 [package]
 name = "tuxhub-autoclicker"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 description = "Autoclicker and input macros for Linux (Wayland and X11), standalone or integrated in tuxhub"
 license = "MIT"
