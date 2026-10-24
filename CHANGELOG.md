@@ -4,7 +4,7 @@ All notable changes are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] - 2026-10-24
 
 ### Added
 
@@ -21,6 +21,12 @@ All notable changes are documented in this file. The format follows
   closes. The settings move from tuxhub to
   `~/.config/tuxhub-autoclicker/config.json`; settings saved in tuxhub are
   imported once.
+
+### Fixed
+
+- The taskbar matches the window to its launcher and icon: the window reports
+  its app id to the compositor.
+- The page inside tuxhub no longer shows a stray pixel at the top left.
 
 ## [0.3.1] - 2026-10-24
 
@@ -52,5 +58,6 @@ First public release.
   dialog and notice instead of browser dialogs.
 - Follows the light or dark appearance reported by tuxhub.
 
+[0.4.0]: https://github.com/SirSnolte/tuxhub-autoclicker/releases/tag/v0.4.0
 [0.3.1]: https://github.com/SirSnolte/tuxhub-autoclicker/releases/tag/v0.3.1
 [0.3.0]: https://github.com/SirSnolte/tuxhub-autoclicker/releases/tag/v0.3.0

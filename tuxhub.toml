@@ -8,7 +8,7 @@
 
 id = "autoclicker"
 name = "Autoclicker"
-version = "0.3.1"
+version = "0.4.0"
 description = "Automated clicking and keyboard and mouse macros for Wayland and X11."
 icon = "assets/icon.svg"
 
