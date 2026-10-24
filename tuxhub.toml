@@ -1,91 +1,29 @@
 # Integration with tuxhub (level 2). See https://github.com/SirSnolte/tuxhub
 #
-# The interface in ui/ is localized and shows the usage notice itself, so the
-# manifest only declares settings, actions and default hotkeys.
+# The settings live in the tool's own background service, so tuxhub and the
+# tool's window always show the same state. The
+# interface in ui/ is localized, shows the usage notice itself and runs both
+# in tuxhub and in the window. The manifest only declares the actions and
+# their default hotkeys.
 
 id = "autoclicker"
 name = "Autoclicker"
 version = "0.3.1"
 description = "Automated clicking and keyboard and mouse macros for Wayland and X11."
+icon = "assets/icon.svg"
 
 ui = "ui/index.html"
+
+[run]
+command = "tuxhub-autoclicker"
 
 [rpc]
 command = "tuxhub-autoclicker"
 args = ["--tuxhub"]
 
-[[settings]]
-key = "interval_ms"
-label = "Interval"
-type = "number"
-default = 100
-min = 1
-max = 60000
-step = 1
-unit = "ms"
-
-[[settings]]
-key = "jitter_pct"
-label = "Random variation"
-type = "number"
-default = 0
-min = 0
-max = 50
-step = 1
-unit = "%"
-
-[[settings]]
-key = "button"
-label = "Mouse button"
-type = "select"
-default = "left"
-options = [
-  { value = "left", label = "Left" },
-  { value = "right", label = "Right" },
-  { value = "middle", label = "Middle" },
-]
-
-[[settings]]
-key = "mode"
-label = "Mode"
-type = "select"
-default = "click"
-options = [
-  { value = "click", label = "Single click" },
-  { value = "double", label = "Double click" },
-  { value = "hold", label = "Hold" },
-]
-
-[[settings]]
-key = "limit"
-label = "Number of clicks"
-type = "number"
-default = 0
-min = 0
-max = 1000000
-step = 1
-
-[[settings]]
-key = "start_delay_s"
-label = "Start delay"
-type = "number"
-default = 3
-min = 0
-max = 30
-step = 1
-unit = "s"
-
-[[settings]]
-key = "stop_shortcut"
-label = "Stop hotkey"
-type = "text"
-default = ""
-
-[[settings]]
-key = "record_moves"
-label = "Record mouse movements"
-type = "toggle"
-default = true
+[uninstall]
+command = "tuxhub-autoclicker"
+args = ["uninstall"]
 
 [[actions]]
 id = "start"

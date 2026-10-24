@@ -4,9 +4,9 @@ Autoclicker and keyboard and mouse macros for Linux. Clicks and macro playback
 use a virtual input device (`/dev/uinput`), so they work on Wayland and X11
 and in every application.
 
-The tool works on its own from the command line and integrates with
-[tuxhub](https://github.com/SirSnolte/tuxhub), which provides a graphical
-interface, settings and global hotkeys.
+The tool works on its own, with its own window and from the command line,
+and integrates with [tuxhub](https://github.com/SirSnolte/tuxhub), which
+shows the same interface and adds global hotkeys.
 
 > Automated input can violate the terms of service of online games, in
 > particular games with anti-cheat software. Use it at your own risk.
@@ -25,8 +25,29 @@ interface, settings and global hotkeys.
 ## Installation
 
 Install it from the workshop in tuxhub, or download the archive from the
-[latest release](https://github.com/SirSnolte/tuxhub-autoclicker/releases/latest)
-and extract it.
+[latest release](https://github.com/SirSnolte/tuxhub-autoclicker/releases/latest),
+extract it and run:
+
+```bash
+./tuxhub-autoclicker install
+```
+
+This copies the tool to `~/.local/share/tuxhub-autoclicker/app`, adds it to
+the application menu and links the command to `~/.local/bin`. tuxhub detects
+this installation and updates it in place. `tuxhub-autoclicker uninstall`
+removes it again; `--purge` also removes the settings and the macros.
+
+## Window and background service
+
+`tuxhub-autoclicker` without arguments opens the window. It shows the same
+interface as tuxhub. Settings, the virtual input devices and the macros
+belong to a small background service, which the window and tuxhub start on
+demand and share, so both always show the same state. The settings are stored
+in `~/.config/tuxhub-autoclicker/config.json`.
+
+When the last window or tuxhub closes, the service stops clicking, playback
+and recording at once and exits. Global hotkeys are registered by tuxhub, so
+they work while tuxhub is running.
 
 ### Permissions
 
@@ -60,7 +81,8 @@ tuxhub-autoclicker play "Open inventory" -r 10 -s 1.5
 tuxhub-autoclicker macros
 ```
 
-Ctrl+C stops clicking and playback immediately. Macros are stored as JSON in
+These commands run on their own, without the service. Ctrl+C stops clicking
+and playback immediately. Macros are stored as JSON in
 `~/.local/share/tuxhub-autoclicker/macros/`.
 
 ## Building
@@ -70,10 +92,15 @@ cargo build --release
 cargo test -- --test-threads=1
 ```
 
+Building the window needs the WebKitGTK 4.1 and GTK 3 development packages
+(`webkit2gtk4.1-devel` on Fedora, `libwebkit2gtk-4.1-dev` on Debian and
+Ubuntu).
+
 The device tests create virtual input devices. Playback tests grab their
 device exclusively, so no input reaches the desktop. The recording test emits
 only F24 on a dedicated test device. Tests are skipped when the required
-permissions are missing.
+permissions are missing. The service tests run the service in their own XDG
+directories and only let the clicker count down, never click.
 
 ## License
 

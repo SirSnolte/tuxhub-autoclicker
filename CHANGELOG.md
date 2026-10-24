@@ -4,6 +4,24 @@ All notable changes are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Own window: `tuxhub-autoclicker` without arguments opens the same interface
+  as in tuxhub, and tuxhub can open it from its menu.
+- `install` and `uninstall` for an installation without tuxhub, with a
+  launcher in the application menu and an icon. tuxhub detects such an
+  installation.
+
+### Changed
+
+- Settings, devices and macros belong to a background service shared by the
+  window and tuxhub. It stops everything and exits when the last of them
+  closes. The settings move from tuxhub to
+  `~/.config/tuxhub-autoclicker/config.json`; settings saved in tuxhub are
+  imported once.
+
 ## [0.3.1] - 2026-10-24
 
 ### Changed

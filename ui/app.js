@@ -1,5 +1,6 @@
-// Interface of the autoclicker inside tuxhub. Talks to the tool process through
-// the tuxhub bridge (window.tuxhub). Texts follow the language reported by tuxhub.
+// Interface of the autoclicker, shown by tuxhub and by the tool's own window;
+// both provide window.tuxhub. Settings, devices and macros live in the
+// background service. Texts follow the language reported by the host.
 
 "use strict";
 
@@ -12,6 +13,8 @@ const STRINGS = {
     "clicker.start": "Start",
     "clicker.stop": "Stop",
     "clicker.hotkeys": "F8 starts or stops immediately. F10 stops everything.",
+    "clicker.hotkeysStandalone":
+      "Hotkeys (F8, F10 and your own) work while tuxhub is running. Here, stop with the button or by closing the window.",
     "clicker.stopKey": "Stop hotkey",
     "clicker.stopKeyHelp": "Optional key that only stops the clicker, in addition to F8 and F10.",
     "clicker.setupHint": "Nothing happens?",
@@ -117,6 +120,8 @@ const STRINGS = {
     "clicker.start": "Start",
     "clicker.stop": "Stopp",
     "clicker.hotkeys": "F8 startet oder stoppt sofort. F10 stoppt alles.",
+    "clicker.hotkeysStandalone":
+      "Hotkeys (F8, F10 und eigene) funktionieren, solange tuxhub läuft. Hier stoppst du mit der Schaltfläche oder indem du das Fenster schließt.",
     "clicker.stopKey": "Stopp-Taste",
     "clicker.stopKeyHelp": "Optionale Taste, die nur den Klicker stoppt, zusätzlich zu F8 und F10.",
     "clicker.setupHint": "Es passiert nichts?",
@@ -348,13 +353,43 @@ const FIELDS = [
 ];
 
 let settings = {};
+let pending = {};
 let saveTimer;
 
+// Changes are collected briefly and sent to the service together.
 function save(key, value) {
   settings[key] = value;
+  pending[key] = value;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => tuxhub.saveSettings({ ...settings }).catch(fail), 300);
+  saveTimer = setTimeout(sendPending, 300);
 }
+
+function sendPending() {
+  const patch = pending;
+  pending = {};
+  tuxhub.call("config.set", patch).catch((e) => {
+    fail(e);
+    loadSettings();
+  });
+}
+
+function applySettings(c) {
+  const changed = JSON.stringify(c) !== JSON.stringify(settings);
+  settings = c;
+  if (changed) {
+    renderForm();
+    showStopKey();
+  }
+}
+
+function loadSettings() {
+  return tuxhub.call("config.get").then(applySettings).catch(fail);
+}
+
+// Another window, tuxhub or the hotkey editor changed the settings.
+tuxhub.on("config", (c) => {
+  if (Object.keys(pending).length === 0) applySettings(c);
+});
 
 function slotted(slot, text, className) {
   return Object.assign(document.createElement("span"), { slot, textContent: text, className: className ?? "" });
@@ -406,10 +441,13 @@ function renderClickerStatus() {
   $("clicker-status").textContent = s ? t(`status.${s.phase}`, { clicks: s.clicks, seconds: s.seconds, error: s.error ?? "" }) : "";
 }
 
-tuxhub.on("status", (s) => {
+function showClickerStatus(s) {
   clickerStatus = s;
   renderClickerStatus();
-});
+}
+tuxhub.on("status", showClickerStatus);
+// The service may have reported its state before this page was loaded.
+tuxhub.call("status").then(showClickerStatus).catch(fail);
 
 // ------------------------------------------------------------ Hotkey input
 
@@ -484,24 +522,15 @@ function showStopKey() {
 $("stop-set").onclick = async () => {
   const trigger = await captureKey($("stop-set"));
   if (!trigger) return;
-  settings.stop_shortcut = trigger;
+  save("stop_shortcut", trigger);
   showStopKey();
-  tuxhub.saveSettings({ ...settings }).catch(fail);
 };
 $("stop-clear").onclick = () => {
-  settings.stop_shortcut = "";
+  save("stop_shortcut", "");
   showStopKey();
-  tuxhub.saveSettings({ ...settings }).catch(fail);
 };
 
-tuxhub
-  .getSettings()
-  .then((s) => {
-    settings = s;
-    renderForm();
-    showStopKey();
-  })
-  .catch(fail);
+loadSettings();
 
 // ------------------------------------------------------------------ Macros
 
@@ -741,5 +770,10 @@ $("ed-save").onclick = async () => {
   }
 };
 
+if (tuxhub.standalone) {
+  document.documentElement.dataset.standalone = "";
+  // Global hotkeys come from tuxhub.
+  $("clicker-hotkeys").dataset.i18n = "clicker.hotkeysStandalone";
+}
 applyStaticTexts();
 loadMacros();

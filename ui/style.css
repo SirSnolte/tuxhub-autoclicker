@@ -5,9 +5,19 @@ body {
   background: transparent;
 }
 
+/* The standalone window has no surrounding tuxhub page. */
+:root[data-standalone] body {
+  background: var(--wa-color-surface-lowered);
+}
+
 main {
-  /* The page sits in the tool area of tuxhub, which has its own margins. */
+  /* Inside tuxhub the page sits in the tool area, which has its own margins. */
   padding: var(--wa-space-2xs);
+}
+:root[data-standalone] main {
+  max-width: 760px;
+  margin-inline: auto;
+  padding: var(--wa-space-xl) var(--wa-space-l);
 }
 
 .status {

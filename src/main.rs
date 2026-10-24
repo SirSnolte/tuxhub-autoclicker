@@ -5,8 +5,10 @@ use tuxhub_autoclicker::device::{Button, Mouse, UDEV_RULE_PATH, setup_access};
 use tuxhub_autoclicker::macros::{self, Macro, Store};
 use tuxhub_autoclicker::player::{Keyboard, PlayStatus, Player};
 use tuxhub_autoclicker::recorder::Recorder;
+use tuxhub_autoclicker::{daemon, integration, proxy, window};
 
-/// Autoclicker and input macros for Linux. Works on Wayland and X11.
+/// Autoclicker and input macros for Linux. Works on Wayland and X11. Without
+/// a command, the window opens.
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
@@ -64,12 +66,26 @@ enum Command {
     Macros,
     /// Grant access to /dev/uinput (asks for the password)
     Setup,
+    /// Run the background service of the window and tuxhub in the foreground
+    Daemon,
+    /// Install for the current user from the extracted release folder
+    Install {
+        /// Install even if tuxhub already manages an installation
+        #[arg(long)]
+        force: bool,
+    },
+    /// Remove the installation and the launcher
+    Uninstall {
+        /// Also remove the settings and the macros
+        #[arg(long)]
+        purge: bool,
+    },
 }
 
 fn main() {
     let cli = Cli::parse();
     let result = if cli.tuxhub {
-        tuxhub_autoclicker::rpc::serve()
+        proxy::serve()
     } else {
         match cli.command {
             Some(Command::Click {
@@ -98,10 +114,22 @@ fn main() {
             Some(Command::Setup) => {
                 setup_access().map(|()| println!("Done: created {UDEV_RULE_PATH}."))
             }
-            None => {
-                use clap::CommandFactory;
-                Cli::command().print_help().map(|()| println!())
-            }
+            Some(Command::Daemon) => daemon::run().map(|started| {
+                if !started {
+                    eprintln!("The service is already running.");
+                }
+            }),
+            Some(Command::Install { force }) => integration::install(force).map(|dir| {
+                println!("Installed to {}.", dir.display());
+                println!("The Autoclicker is in the application menu.");
+                println!("tuxhub detects this installation automatically.");
+            }),
+            Some(Command::Uninstall { purge }) => integration::uninstall(purge).map(|removed| {
+                for path in removed {
+                    println!("Removed {}", path.display());
+                }
+            }),
+            None => window::run(),
         }
     };
     if let Err(e) = result {

@@ -17,7 +17,7 @@ pub enum Mode {
     Hold,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub interval_ms: u64,
