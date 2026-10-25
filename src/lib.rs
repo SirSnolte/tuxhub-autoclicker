@@ -11,4 +11,5 @@ pub mod macros;
 pub mod paths;
 pub mod player;
 pub mod recorder;
+pub mod service;
 pub mod window;

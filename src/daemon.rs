@@ -30,13 +30,12 @@ use crate::live::{self, Failure};
 use crate::macros::{self, Macro, Store};
 use crate::player::{Keyboard, PlayStatus, Player};
 use crate::recorder::Recorder;
+use crate::service::{Clients, Writer, bind, read_line, try_lock};
 use crate::{integration, paths};
 use serde_json::{Value, json};
-use std::io::{self, BufRead, BufReader, Read, Write};
-use std::os::fd::AsRawFd;
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::io::{self, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
@@ -46,55 +45,11 @@ const LOCK_NAME: &str = "tuxhub-autoclicker.lock";
 /// How long the service waits for a client before it exits, after the start
 /// and after the last client disconnected.
 const IDLE_EXIT: Duration = Duration::from_secs(2);
-/// Longest line a client may send, without the line break.
-const MAX_LINE: usize = 1 << 20;
 
 pub fn socket_path() -> io::Result<PathBuf> {
     Ok(paths::runtime_dir()?
         .join("tuxhub")
         .join(format!("{}.sock", live::TOOL_ID)))
-}
-
-/// Listens on `path`: creates its folder with mode 0700, replaces a socket
-/// that nobody listens on, and never removes anything else.
-fn bind(path: &Path) -> io::Result<UnixListener> {
-    let dir = path
-        .parent()
-        .ok_or_else(|| io::Error::other("invalid socket path"))?;
-    match std::fs::symlink_metadata(dir) {
-        Ok(m) if m.is_dir() => {}
-        Ok(_) => {
-            return Err(io::Error::other(format!(
-                "{} is not a folder",
-                dir.display()
-            )));
-        }
-        Err(_) => {
-            std::fs::create_dir_all(dir)?;
-            std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
-        }
-    }
-    match std::fs::symlink_metadata(path) {
-        Ok(m) if m.file_type().is_socket() => {
-            if UnixStream::connect(path).is_ok() {
-                return Err(io::Error::new(
-                    io::ErrorKind::AddrInUse,
-                    format!("{} is in use", path.display()),
-                ));
-            }
-            std::fs::remove_file(path)?;
-        }
-        Ok(_) => {
-            return Err(io::Error::other(format!(
-                "{} exists and is not a socket; remove it to start the service",
-                path.display()
-            )));
-        }
-        Err(_) => {}
-    }
-    let server = UnixListener::bind(path)?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
-    Ok(server)
 }
 
 enum Msg {
@@ -151,58 +106,6 @@ pub fn run() -> io::Result<bool> {
     Ok(true)
 }
 
-/// Takes an exclusive lock that is released when the process exits.
-fn try_lock(path: &Path) -> io::Result<Option<std::fs::File>> {
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(path)?;
-    let ok = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0;
-    Ok(ok.then_some(file))
-}
-
-// ----------------------------------------------------------------- Clients
-
-type Writer = Arc<Mutex<UnixStream>>;
-
-#[derive(Clone, Default)]
-struct Clients(Arc<Mutex<Vec<(u64, Writer)>>>);
-
-impl Clients {
-    fn add(&self, id: u64, w: Writer) {
-        self.0.lock().unwrap().push((id, w));
-    }
-
-    fn remove(&self, id: u64) {
-        self.0.lock().unwrap().retain(|(i, _)| *i != id);
-    }
-
-    fn is_empty(&self) -> bool {
-        self.0.lock().unwrap().is_empty()
-    }
-
-    fn notify(&self, method: &str, params: Value) {
-        self.notify_except(None, method, params);
-    }
-
-    /// Notifies every connection but `except`.
-    fn notify_except(&self, except: Option<u64>, method: &str, params: Value) {
-        let line = format!("{}\n", json!({ "method": method, "params": params }));
-        self.0.lock().unwrap().retain(|(id, w)| {
-            Some(*id) == except || w.lock().unwrap().write_all(line.as_bytes()).is_ok()
-        });
-    }
-
-    /// Notifies connection `client` only.
-    fn notify_one(&self, client: u64, method: &str, params: Value) {
-        let line = format!("{}\n", json!({ "method": method, "params": params }));
-        if let Some((_, w)) = self.0.lock().unwrap().iter().find(|(id, _)| *id == client) {
-            let _ = w.lock().unwrap().write_all(line.as_bytes());
-        }
-    }
-}
-
 fn accept(server: UnixListener, clients: Clients, tx: Sender<Msg>) {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     for stream in server.incoming() {
@@ -229,21 +132,6 @@ fn accept(server: UnixListener, clients: Clients, tx: Sender<Msg>) {
                 let _ = tx.send(Msg::Left);
             });
     }
-}
-
-/// Reads one line of at most [`MAX_LINE`] bytes; `None` at the end, on an
-/// error or for a longer line.
-fn read_line(reader: &mut impl BufRead, buf: &mut Vec<u8>) -> Option<()> {
-    buf.clear();
-    let n = reader
-        .take(MAX_LINE as u64 + 1)
-        .read_until(b'\n', buf)
-        .ok()?;
-    if n == 0 || buf.last() != Some(&b'\n') {
-        return None;
-    }
-    buf.pop();
-    Some(())
 }
 
 /// Answers the requests of one connection. A line that is too long or not a
