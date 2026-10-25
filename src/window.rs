@@ -2,7 +2,7 @@
 //! tuxhub shows, and connects it to the background service.
 
 use crate::client;
-use crate::integration::{APP_ID, tool_root};
+use crate::integration::{APP_ID, DISPLAY_NAME, tool_root};
 use serde_json::{Value, json};
 use std::borrow::Cow;
 use std::ffi::{CString, c_char};
@@ -47,7 +47,7 @@ pub fn run() -> io::Result<()> {
 
     let dark = desktop_prefers_dark();
     let window = WindowBuilder::new()
-        .with_title("Autoclicker")
+        .with_title(DISPLAY_NAME)
         .with_inner_size(LogicalSize::new(880.0, 760.0))
         .with_min_inner_size(LogicalSize::new(480.0, 420.0))
         .with_theme(dark.map(|d| if d { Theme::Dark } else { Theme::Light }))
@@ -198,7 +198,7 @@ fn ipc(socket: &Socket, proxy: &EventLoopProxy<UserEvent>, body: &str) {
         .as_ref()
         .map(|mut s| writeln!(s, "{request}"));
     if !matches!(sent, Some(Ok(()))) {
-        reply(Err("the Autoclicker service is not available".into()));
+        reply(Err(format!("the {DISPLAY_NAME} service is not available")));
     }
 }
 

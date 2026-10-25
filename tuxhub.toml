@@ -1,12 +1,11 @@
-# Integration with tuxhub (level 3, live interface; requires tuxhub 0.7.0 or
-# newer). See https://github.com/SirSnolte/tuxhub
+# Integration with tuxhub (live interface, requires tuxhub 0.7.0 or newer).
+# See https://github.com/SirSnolte/tuxhub
 #
-# The settings live in the tool's own background service, so tuxhub and the
-# tool's window always show the same state. tuxhub starts the service when
-# needed and talks to it over its live socket. The
-# interface in ui/ is localized, shows the usage notice itself and runs both
-# in tuxhub and in the window. The manifest only declares the actions and
-# their default hotkeys.
+# The settings live in the tool's own background service, so tuxhub, the
+# tool's window and the command line always show the same state. tuxhub
+# starts the service when needed and talks to it over its live socket. The
+# interface in ui/ is localized and runs both in tuxhub and in the window.
+# The manifest only declares the actions and their default hotkeys.
 
 id = "autoclicker"
 name = "Autoclicker"
