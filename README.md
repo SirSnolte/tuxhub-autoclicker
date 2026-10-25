@@ -53,21 +53,7 @@ the application menu and links the command to `~/.local/bin`. tuxhub detects
 this installation and updates it in place. `tuxhub-autoclicker uninstall`
 removes it again; `--purge` also removes the settings and the macros.
 
-## Usage
-
-### Window and background service
-
-`tuxhub-autoclicker` without arguments opens the window. It shows the same
-interface as tuxhub. Settings, the virtual input devices and the macros
-belong to a small background service, which the window and tuxhub start on
-demand and share, so both always show the same state. The settings are stored
-in `~/.config/tuxhub-autoclicker/config.json`.
-
-When the last window or tuxhub closes, the service stops clicking, playback
-and recording at once and exits. Global hotkeys are registered by tuxhub, so
-they work while tuxhub is running.
-
-#### Permissions
+### Requirements
 
 Creating virtual input devices requires write access to `/dev/uinput`. Many
 systems grant it already, for example when Steam is installed. Otherwise run:
@@ -88,6 +74,20 @@ sudo usermod -aG input "$USER"   # log out and in again afterwards
 
 Input devices are read only while a recording is active. Every key is stored
 during a recording, so do not type passwords while recording.
+
+## Usage
+
+### Window and background service
+
+`tuxhub-autoclicker` without arguments opens the window. It shows the same
+interface as tuxhub. Settings, the virtual input devices and the macros
+belong to a small background service, which the window and tuxhub start on
+demand and share, so both always show the same state. The settings are stored
+in `~/.config/tuxhub-autoclicker/config.json`.
+
+When the last window or tuxhub closes, the service stops clicking, playback
+and recording at once and exits. Global hotkeys are registered by tuxhub, so
+they work while tuxhub is running.
 
 ### Command line
 
