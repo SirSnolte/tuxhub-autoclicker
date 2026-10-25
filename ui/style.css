@@ -90,6 +90,8 @@ wa-tab-panel::part(base) {
 /* Tables */
 .table-card::part(body) {
   padding: 0;
+  /* A table wider than the card scrolls inside it instead of sticking out. */
+  overflow-x: auto;
 }
 table {
   border-collapse: collapse;
