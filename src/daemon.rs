@@ -2,16 +2,17 @@
 //! the clicker, the macro player and the recorder.
 //!
 //! Exactly one service runs per user. The window, tuxhub and the command line
-//! talk to it over a Unix socket with the same line-based JSON-RPC protocol
-//! that tuxhub uses, so all of them always show the same state.
+//! talk to it over the Unix socket of the tuxhub live interface
+//! (`$XDG_RUNTIME_DIR/tuxhub/autoclicker.sock`, one JSON object per line), so
+//! all of them always show the same state.
 //!
 //! Automated input must never outlive its interface: when the last window or
 //! tuxhub disconnects, the service stops everything at once and exits shortly
 //! after.
 //!
 //! Methods:
-//! - `configure` (ignored, the settings live here), `config.get`,
-//!   `config.set`, `status`, `shortcuts`, `keys`, `quit`
+//! - Live interface: `hello`, `schema`, `get`, `set`, `quit`
+//! - `config.get`, `config.set`, `status`, `shortcuts`, `keys`
 //! - `action` with `id`: `start`, `stop`, `toggle`, `setup`, `record`
 //!   (start or stop recording), `panic` (stop everything), `macro:<id>`
 //!   (play or stop a macro)
@@ -19,19 +20,21 @@
 //!   `macros.play`, `macros.stop`, `record.start`, `record.stop`
 //!
 //! Notifications: `status` (clicker), `macro-status`, `macros-changed`,
-//! `config` and `shortcuts` (runtime hotkeys for tuxhub).
+//! `config`, `changed` (the values of the live schema) and `shortcuts`
+//! (runtime hotkeys for tuxhub, also right after `hello`).
 
 use crate::clicker::{Clicker, Phase, Status};
 use crate::config::Config;
 use crate::device::{Mouse, setup_access};
+use crate::live::{self, Failure};
 use crate::macros::{self, Macro, Store};
 use crate::player::{Keyboard, PlayStatus, Player};
 use crate::recorder::Recorder;
 use crate::{integration, paths};
 use serde_json::{Value, json};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::fd::AsRawFd;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -39,21 +42,68 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-const SOCKET_NAME: &str = "tuxhub-autoclicker.sock";
 const LOCK_NAME: &str = "tuxhub-autoclicker.lock";
 /// How long the service waits for a client before it exits, after the start
 /// and after the last client disconnected.
 const IDLE_EXIT: Duration = Duration::from_secs(2);
+/// Longest line a client may send, without the line break.
+const MAX_LINE: usize = 1 << 20;
 
 pub fn socket_path() -> io::Result<PathBuf> {
-    Ok(paths::runtime_dir()?.join(SOCKET_NAME))
+    Ok(paths::runtime_dir()?
+        .join("tuxhub")
+        .join(format!("{}.sock", live::TOOL_ID)))
+}
+
+/// Listens on `path`: creates its folder with mode 0700, replaces a socket
+/// that nobody listens on, and never removes anything else.
+fn bind(path: &Path) -> io::Result<UnixListener> {
+    let dir = path
+        .parent()
+        .ok_or_else(|| io::Error::other("invalid socket path"))?;
+    match std::fs::symlink_metadata(dir) {
+        Ok(m) if m.is_dir() => {}
+        Ok(_) => {
+            return Err(io::Error::other(format!(
+                "{} is not a folder",
+                dir.display()
+            )));
+        }
+        Err(_) => {
+            std::fs::create_dir_all(dir)?;
+            std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+        }
+    }
+    match std::fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_socket() => {
+            if UnixStream::connect(path).is_ok() {
+                return Err(io::Error::new(
+                    io::ErrorKind::AddrInUse,
+                    format!("{} is in use", path.display()),
+                ));
+            }
+            std::fs::remove_file(path)?;
+        }
+        Ok(_) => {
+            return Err(io::Error::other(format!(
+                "{} exists and is not a socket; remove it to start the service",
+                path.display()
+            )));
+        }
+        Err(_) => {}
+    }
+    let server = UnixListener::bind(path)?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    Ok(server)
 }
 
 enum Msg {
     Request {
+        /// Connection the request came from.
+        client: u64,
         method: String,
         params: Value,
-        reply: Sender<Result<Value, String>>,
+        reply: Sender<Result<Value, Failure>>,
     },
     /// A client disconnected.
     Left,
@@ -71,9 +121,7 @@ pub fn run() -> io::Result<bool> {
         return Ok(false);
     };
     let socket = socket_path()?;
-    let _ = std::fs::remove_file(&socket);
-    let server = UnixListener::bind(&socket)?;
-    std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600))?;
+    let server = bind(&socket)?;
 
     let (tx, rx) = std::sync::mpsc::channel();
     {
@@ -135,11 +183,23 @@ impl Clients {
     }
 
     fn notify(&self, method: &str, params: Value) {
+        self.notify_except(None, method, params);
+    }
+
+    /// Notifies every connection but `except`.
+    fn notify_except(&self, except: Option<u64>, method: &str, params: Value) {
         let line = format!("{}\n", json!({ "method": method, "params": params }));
-        self.0
-            .lock()
-            .unwrap()
-            .retain(|(_, w)| w.lock().unwrap().write_all(line.as_bytes()).is_ok());
+        self.0.lock().unwrap().retain(|(id, w)| {
+            Some(*id) == except || w.lock().unwrap().write_all(line.as_bytes()).is_ok()
+        });
+    }
+
+    /// Notifies connection `client` only.
+    fn notify_one(&self, client: u64, method: &str, params: Value) {
+        let line = format!("{}\n", json!({ "method": method, "params": params }));
+        if let Some((_, w)) = self.0.lock().unwrap().iter().find(|(id, _)| *id == client) {
+            let _ = w.lock().unwrap().write_all(line.as_bytes());
+        }
     }
 }
 
@@ -162,18 +222,38 @@ fn accept(server: UnixListener, clients: Clients, tx: Sender<Msg>) {
         let _ = std::thread::Builder::new()
             .name(format!("client-{id}"))
             .spawn(move || {
-                serve_client(read, &writer, &tx);
+                serve_client(id, read, &writer, &tx);
                 clients.remove(id);
+                // Wakes up a client that is still blocked on its socket.
+                let _ = writer.lock().unwrap().shutdown(std::net::Shutdown::Both);
                 let _ = tx.send(Msg::Left);
             });
     }
 }
 
-fn serve_client(read: UnixStream, writer: &Writer, tx: &Sender<Msg>) {
-    for line in BufReader::new(read).lines() {
-        let Ok(line) = line else { break };
-        let Ok(msg) = serde_json::from_str::<Value>(&line) else {
-            continue;
+/// Reads one line of at most [`MAX_LINE`] bytes; `None` at the end, on an
+/// error or for a longer line.
+fn read_line(reader: &mut impl BufRead, buf: &mut Vec<u8>) -> Option<()> {
+    buf.clear();
+    let n = reader
+        .take(MAX_LINE as u64 + 1)
+        .read_until(b'\n', buf)
+        .ok()?;
+    if n == 0 || buf.last() != Some(&b'\n') {
+        return None;
+    }
+    buf.pop();
+    Some(())
+}
+
+/// Answers the requests of one connection. A line that is too long or not a
+/// JSON object closes it.
+fn serve_client(client: u64, read: UnixStream, writer: &Writer, tx: &Sender<Msg>) {
+    let mut reader = BufReader::new(read);
+    let mut buf = Vec::new();
+    while read_line(&mut reader, &mut buf).is_some() {
+        let Ok(msg @ Value::Object(_)) = serde_json::from_slice::<Value>(&buf) else {
+            break;
         };
         let id = msg.get("id").cloned();
         let method = msg
@@ -185,6 +265,7 @@ fn serve_client(read: UnixStream, writer: &Writer, tx: &Sender<Msg>) {
         let (rtx, rrx) = std::sync::mpsc::channel();
         if tx
             .send(Msg::Request {
+                client,
                 method,
                 params,
                 reply: rtx,
@@ -199,7 +280,11 @@ fn serve_client(read: UnixStream, writer: &Writer, tx: &Sender<Msg>) {
         if let Some(id) = id {
             let reply = match result {
                 Ok(r) => json!({ "id": id, "result": r }),
-                Err(e) => json!({ "id": id, "error": { "message": e } }),
+                Err(Failure {
+                    message,
+                    field: Some(field),
+                }) => json!({ "id": id, "error": { "message": message, "field": field } }),
+                Err(e) => json!({ "id": id, "error": { "message": e.message } }),
             };
             if writeln!(writer.lock().unwrap(), "{reply}").is_err() {
                 break;
@@ -256,6 +341,7 @@ impl Service {
             match rx.recv_timeout(timeout) {
                 Ok(Msg::Terminate) | Err(RecvTimeoutError::Disconnected) => return,
                 Ok(Msg::Request {
+                    client,
                     method,
                     params,
                     reply,
@@ -264,7 +350,15 @@ impl Service {
                         let _ = reply.send(Ok(json!(true)));
                         return;
                     }
-                    let _ = reply.send(self.request(&method, params));
+                    let hello = method == "hello";
+                    let result = self.request(client, &method, params);
+                    let greeted = hello && result.is_ok();
+                    let _ = reply.send(result);
+                    if greeted {
+                        // tuxhub registers the runtime hotkeys right away.
+                        self.clients
+                            .notify_one(client, "shortcuts", self.shortcuts());
+                    }
                 }
                 Ok(Msg::SetupDone(result)) => self.setup_done(result),
                 Ok(Msg::Left) | Err(RecvTimeoutError::Timeout) => {}
@@ -376,13 +470,20 @@ impl Service {
         }
     }
 
-    fn set_config(&mut self, cfg: Config) -> Result<(), String> {
+    /// Saves and applies `cfg`. `origin` is the connection that set a value
+    /// over the live interface; it gets no `changed` for it.
+    fn set_config(&mut self, cfg: Config, origin: Option<u64>) -> Result<(), String> {
         if cfg == self.cfg {
             return Ok(());
         }
         cfg.save()
             .map_err(|e| format!("could not save the settings: {e}"))?;
         let old = std::mem::replace(&mut self.cfg, cfg);
+        let values = live::values(&self.cfg);
+        if live::values(&old) != values {
+            self.clients
+                .notify_except(origin, "changed", json!({ "values": values }));
+        }
         self.clients.notify("config", json!(self.cfg));
         if old.stop_shortcut != self.cfg.stop_shortcut {
             self.clients.notify("shortcuts", self.shortcuts());
@@ -445,15 +546,30 @@ impl Service {
         Ok(json!(true))
     }
 
-    fn request(&mut self, method: &str, params: Value) -> Result<Value, String> {
+    fn request(&mut self, client: u64, method: &str, params: Value) -> Result<Value, Failure> {
+        match method {
+            "hello" => live::hello(&params),
+            "schema" => Ok(live::schema(
+                params.get("locale").and_then(Value::as_str).unwrap_or("en"),
+            )),
+            "get" => Ok(json!({ "values": live::values(&self.cfg) })),
+            "set" => {
+                let (cfg, value) = live::set(&self.cfg, &params)?;
+                self.set_config(cfg, Some(client))?;
+                Ok(json!({ "value": value }))
+            }
+            _ => Ok(self.tool_request(method, params)?),
+        }
+    }
+
+    /// The tool's own methods.
+    fn tool_request(&mut self, method: &str, params: Value) -> Result<Value, String> {
         let str_param = |key: &str| params.get(key).and_then(Value::as_str).map(str::to_owned);
         match method {
-            // Settings stored by tuxhub; this tool keeps its own configuration.
-            "configure" => Ok(json!(true)),
             "config.get" => Ok(json!(self.cfg)),
             "config.set" => {
                 let cfg = self.cfg.merged(params)?;
-                self.set_config(cfg)?;
+                self.set_config(cfg, None)?;
                 Ok(json!(self.cfg))
             }
             "status" => Ok(json!(*self.last_status.lock().unwrap())),

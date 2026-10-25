@@ -24,7 +24,7 @@ shows the same interface and adds global hotkeys.
 
 ## Installation
 
-Install it from the workshop in tuxhub, or download the archive from the
+Install it from the workshop in tuxhub (version 0.6.0 or newer), or download the archive from the
 [latest release](https://github.com/SirSnolte/tuxhub-autoclicker/releases/latest),
 extract it and run:
 

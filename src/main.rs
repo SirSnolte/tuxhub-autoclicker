@@ -5,16 +5,13 @@ use tuxhub_autoclicker::device::{Button, Mouse, UDEV_RULE_PATH, setup_access};
 use tuxhub_autoclicker::macros::{self, Macro, Store};
 use tuxhub_autoclicker::player::{Keyboard, PlayStatus, Player};
 use tuxhub_autoclicker::recorder::Recorder;
-use tuxhub_autoclicker::{daemon, integration, proxy, window};
+use tuxhub_autoclicker::{daemon, integration, window};
 
 /// Autoclicker and input macros for Linux. Works on Wayland and X11. Without
 /// a command, the window opens.
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-    /// tuxhub mode: JSON-RPC over standard input and output (used by tuxhub)
-    #[arg(long, hide = true)]
-    tuxhub: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -84,53 +81,49 @@ enum Command {
 
 fn main() {
     let cli = Cli::parse();
-    let result = if cli.tuxhub {
-        proxy::serve()
-    } else {
-        match cli.command {
-            Some(Command::Click {
-                interval,
-                button,
-                mode,
-                count,
-                jitter,
-                delay,
-            }) => click(Config {
-                interval_ms: interval,
-                jitter_pct: jitter,
-                button,
-                mode,
-                limit: count,
-                start_delay_s: delay,
-            }),
-            Some(Command::Record { name, no_moves }) => record(&name, !no_moves),
-            Some(Command::Play {
-                name,
-                repeat,
-                speed,
-                delay,
-            }) => play(&name, repeat, speed, delay),
-            Some(Command::Macros) => list_macros(),
-            Some(Command::Setup) => {
-                setup_access().map(|()| println!("Done: created {UDEV_RULE_PATH}."))
-            }
-            Some(Command::Daemon) => daemon::run().map(|started| {
-                if !started {
-                    eprintln!("The service is already running.");
-                }
-            }),
-            Some(Command::Install { force }) => integration::install(force).map(|dir| {
-                println!("Installed to {}.", dir.display());
-                println!("The Autoclicker is in the application menu.");
-                println!("tuxhub detects this installation automatically.");
-            }),
-            Some(Command::Uninstall { purge }) => integration::uninstall(purge).map(|removed| {
-                for path in removed {
-                    println!("Removed {}", path.display());
-                }
-            }),
-            None => window::run(),
+    let result = match cli.command {
+        Some(Command::Click {
+            interval,
+            button,
+            mode,
+            count,
+            jitter,
+            delay,
+        }) => click(Config {
+            interval_ms: interval,
+            jitter_pct: jitter,
+            button,
+            mode,
+            limit: count,
+            start_delay_s: delay,
+        }),
+        Some(Command::Record { name, no_moves }) => record(&name, !no_moves),
+        Some(Command::Play {
+            name,
+            repeat,
+            speed,
+            delay,
+        }) => play(&name, repeat, speed, delay),
+        Some(Command::Macros) => list_macros(),
+        Some(Command::Setup) => {
+            setup_access().map(|()| println!("Done: created {UDEV_RULE_PATH}."))
         }
+        Some(Command::Daemon) => daemon::run().map(|started| {
+            if !started {
+                eprintln!("The service is already running.");
+            }
+        }),
+        Some(Command::Install { force }) => integration::install(force).map(|dir| {
+            println!("Installed to {}.", dir.display());
+            println!("The Autoclicker is in the application menu.");
+            println!("tuxhub detects this installation automatically.");
+        }),
+        Some(Command::Uninstall { purge }) => integration::uninstall(purge).map(|removed| {
+            for path in removed {
+                println!("Removed {}", path.display());
+            }
+        }),
+        None => window::run(),
     };
     if let Err(e) = result {
         eprintln!("Error: {e}");

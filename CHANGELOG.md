@@ -4,6 +4,31 @@ All notable changes are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - unreleased
+
+Requires tuxhub 0.6.0 or newer.
+
+### Changed
+
+- tuxhub talks to the service over its live interface, the socket
+  `$XDG_RUNTIME_DIR/tuxhub/autoclicker.sock`, and starts the service when
+  needed. The window and the command line use the same socket. tuxhub's
+  connection counts as a client: when the last client goes, clicking stops
+  at once and the service exits after two seconds, as before.
+- The service offers its basic settings (interval, random variation, button,
+  mode, number of clicks, start delay, recording of mouse movements) and the
+  actions `toggle`, `panic` and `setup` to every live client; changes reach
+  all of them at once. Macros and the stop hotkey stay in the tool's own
+  interface.
+- A file that is not a socket in place of the socket is never removed; the
+  service refuses to start instead. A line over 1 MiB, or one that is not a
+  JSON object, closes only that connection.
+
+### Removed
+
+- tuxhub mode (`--tuxhub`) and the `configure` request, used by tuxhub 0.5
+  and older.
+
 ## [0.4.0] - 2026-10-24
 
 ### Added

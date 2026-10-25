@@ -1,14 +1,16 @@
-# Integration with tuxhub (level 2). See https://github.com/SirSnolte/tuxhub
+# Integration with tuxhub (level 3, live interface; requires tuxhub 0.6.0 or
+# newer). See https://github.com/SirSnolte/tuxhub
 #
 # The settings live in the tool's own background service, so tuxhub and the
-# tool's window always show the same state. The
+# tool's window always show the same state. tuxhub starts the service when
+# needed and talks to it over its live socket. The
 # interface in ui/ is localized, shows the usage notice itself and runs both
 # in tuxhub and in the window. The manifest only declares the actions and
 # their default hotkeys.
 
 id = "autoclicker"
 name = "Autoclicker"
-version = "0.4.0"
+version = "0.5.0"
 description = "Automated clicking and keyboard and mouse macros for Wayland and X11."
 icon = "assets/icon.svg"
 
@@ -17,9 +19,9 @@ ui = "ui/index.html"
 [run]
 command = "tuxhub-autoclicker"
 
-[rpc]
+[live]
 command = "tuxhub-autoclicker"
-args = ["--tuxhub"]
+args = ["daemon"]
 
 [uninstall]
 command = "tuxhub-autoclicker"

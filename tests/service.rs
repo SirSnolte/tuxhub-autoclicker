@@ -1,4 +1,4 @@
-//! The background service, tuxhub mode and the installation, run as separate
+//! The background service, its live interface and the installation, run as separate
 //! processes with their own XDG directories, so nothing touches the real
 //! session. No test starts clicking: the clicker only counts down.
 
@@ -49,7 +49,7 @@ impl Env {
         self.root.join("data")
     }
     fn socket(&self) -> PathBuf {
-        self.runtime.join("tuxhub-autoclicker.sock")
+        self.runtime.join("tuxhub/autoclicker.sock")
     }
 
     fn command(&self, exe: &Path) -> Command {
@@ -128,6 +128,59 @@ struct Conn {
 }
 
 impl Conn {
+    /// The next line, or `None` once the connection is closed.
+    fn try_read(&mut self) -> Option<Value> {
+        let mut line = String::new();
+        match self.reader.read_line(&mut line) {
+            Ok(0) | Err(_) => None,
+            Ok(_) => Some(serde_json::from_str(&line).unwrap()),
+        }
+    }
+
+    /// The error object of a refused request.
+    fn refused(&mut self, method: &str, params: Value) -> Value {
+        self.next += 1;
+        let id = self.next;
+        writeln!(
+            self.stream,
+            "{}",
+            json!({ "id": id, "method": method, "params": params })
+        )
+        .unwrap();
+        loop {
+            let msg = self.read();
+            if msg["id"] == json!(id) {
+                return msg.get("error").cloned().expect("the request was accepted");
+            }
+            self.notes.push(msg);
+        }
+    }
+
+    fn hello(&mut self) -> Value {
+        self.call(
+            "hello",
+            json!({ "protocol": 1, "client": "test", "locale": "en" }),
+        )
+        .unwrap()
+    }
+
+    /// Notifications named `method` received within `wait`, including
+    /// skipped ones.
+    fn notes(&mut self, method: &str, wait: Duration) -> Vec<Value> {
+        self.stream.set_read_timeout(Some(wait)).unwrap();
+        while let Some(msg) = self.try_read() {
+            self.notes.push(msg);
+        }
+        self.stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        self.notes
+            .iter()
+            .filter(|n| n["method"] == method)
+            .map(|n| n["params"].clone())
+            .collect()
+    }
+
     fn read(&mut self) -> Value {
         let mut line = String::new();
         assert!(
@@ -273,6 +326,8 @@ fn a_second_instance_ends_at_once() {
     let out = env.command(Path::new(EXE)).arg("daemon").output().unwrap();
     assert!(out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("already running"));
+    // Edge case 1: the socket of the running service stays.
+    assert_eq!(env.connect().hello()["protocol"], 1);
 }
 
 #[test]
@@ -316,68 +371,214 @@ fn stops_and_exits_when_the_last_client_disconnects() {
 }
 
 #[test]
-fn tuxhub_mode_forwards_requests_and_reports_the_state() {
-    let env = Env::new("proxy");
-    let mut child = env
-        .command(Path::new(EXE))
-        .arg("--tuxhub")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
+fn answers_the_live_protocol() {
+    let env = Env::new("protocol");
+    let _service = env.daemon();
+    let mut c = env.connect();
+    let hello = c.hello();
+    assert_eq!(hello["protocol"], 1);
+    assert_eq!(hello["name"], "Autoclicker");
+    assert_eq!(hello["version"], env!("CARGO_PKG_VERSION"));
+    // Right after `hello` the runtime hotkeys, for tuxhub.
+    assert!(c.notes("shortcuts", Duration::from_millis(300))[0].is_array());
+    assert!(c.call("hello", json!({ "protocol": 2 })).is_err());
+
+    let de = c.call("schema", json!({ "locale": "de" })).unwrap();
+    assert_eq!(de["sections"][0]["label"], "Klicken");
+    let fr = c.call("schema", json!({ "locale": "fr" })).unwrap();
+    assert_eq!(fr["sections"][0]["label"], "Clicking");
+    let values = c.call("get", json!({})).unwrap();
+    assert_eq!(
+        values,
+        json!({ "values": {
+            "interval_ms": 100, "jitter_pct": 0, "button": "left", "mode": "click",
+            "limit": 0, "start_delay_s": 3, "record_moves": true
+        } })
+    );
+    // The tool's own methods are unchanged; `configure` is gone.
+    assert!(c.call("macros.list", json!({})).unwrap().is_array());
+    assert!(c.call("configure", json!({})).is_err());
+}
+
+#[test]
+fn socket_and_folder_are_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let env = Env::new("modes");
+    let _service = env.daemon();
+    let _c = env.connect();
+    let dir = std::fs::metadata(env.socket().parent().unwrap()).unwrap();
+    let sock = std::fs::metadata(env.socket()).unwrap();
+    assert_eq!(dir.permissions().mode() & 0o777, 0o700);
+    assert_eq!(sock.permissions().mode() & 0o777, 0o600);
+}
+
+/// Edge case 2: a socket file that nobody listens on is replaced.
+#[test]
+fn a_dead_socket_is_replaced() {
+    let env = Env::new("dead");
+    std::fs::create_dir_all(env.socket().parent().unwrap()).unwrap();
+    drop(std::os::unix::net::UnixListener::bind(env.socket()).unwrap());
+    let _service = env.daemon();
+    assert_eq!(env.connect().hello()["protocol"], 1);
+}
+
+/// Edge case 3: a regular file or a symbolic link in place of the socket is
+/// never removed; the service refuses to start.
+#[test]
+fn foreign_files_at_the_socket_path_are_kept() {
+    for kind in ["file", "symlink"] {
+        let env = Env::new(kind);
+        std::fs::create_dir_all(env.socket().parent().unwrap()).unwrap();
+        let target = env.root.join("target");
+        std::fs::write(&target, "keep").unwrap();
+        if kind == "file" {
+            std::fs::write(env.socket(), "keep").unwrap();
+        } else {
+            std::os::unix::fs::symlink(&target, env.socket()).unwrap();
+        }
+        let out = env.command(Path::new(EXE)).arg("daemon").output().unwrap();
+        assert!(!out.status.success(), "{kind}");
+        let meta = std::fs::symlink_metadata(env.socket()).unwrap();
+        assert_eq!(meta.file_type().is_symlink(), kind == "symlink");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "keep");
+    }
+}
+
+/// Edge case 4: refused values name the field and change nothing.
+#[test]
+fn set_refuses_invalid_values() {
+    let env = Env::new("refuse");
+    let _service = env.daemon();
+    let mut c = env.connect();
+    c.hello();
+    let before = c.call("config.get", Value::Null).unwrap();
+    for (key, value) in [
+        ("stop_shortcut", json!("F7")),
+        ("button", json!(1)),
+        ("interval_ms", json!(0)),
+    ] {
+        let e = c.refused("set", json!({ "key": key, "value": value }));
+        assert_eq!(e["field"], key, "{e}");
+        assert!(e["message"].as_str().is_some_and(|m| !m.is_empty()));
+    }
+    assert_eq!(c.call("config.get", Value::Null).unwrap(), before);
+    assert!(!env.config().join("tuxhub-autoclicker/config.json").exists());
+}
+
+/// Edge case 5: the connection that sets a value gets no `changed`, the
+/// others do; the value is saved.
+#[test]
+fn set_notifies_the_other_connections() {
+    let env = Env::new("set");
+    let _service = env.daemon();
+    let (mut a, mut b) = (env.connect(), env.connect());
+    a.hello();
+    b.hello();
+    let applied = a
+        .call("set", json!({ "key": "interval_ms", "value": 250 }))
         .unwrap();
-    let mut stdin = child.stdin.take().unwrap();
-    let (tx, rx) = std::sync::mpsc::channel::<Value>();
-    let stdout = child.stdout.take().unwrap();
-    std::thread::spawn(move || {
-        for line in BufReader::new(stdout).lines() {
-            let Ok(line) = line else { break };
-            let _ = tx.send(serde_json::from_str(&line).unwrap());
-        }
-    });
-    let mut proxy = Guard(child);
-    let mut seen = Vec::new();
-    let mut wait = |pred: &dyn Fn(&Value) -> bool| -> Value {
-        if let Some(i) = seen.iter().position(pred) {
-            return seen.remove(i);
-        }
+    assert_eq!(applied, json!({ "value": 250 }));
+    let changed = b.notes("changed", Duration::from_millis(500));
+    assert_eq!(changed.len(), 1);
+    assert_eq!(changed[0]["values"]["interval_ms"], 250);
+    assert_eq!(b.notes("config", Duration::from_millis(10)).len(), 1);
+    assert!(a.notes("changed", Duration::from_millis(300)).is_empty());
+    let saved: Value = serde_json::from_str(
+        &std::fs::read_to_string(env.config().join("tuxhub-autoclicker/config.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(saved["interval_ms"], 250);
+}
+
+/// Edge case 6: a change from the window reaches every live connection.
+#[test]
+fn config_set_notifies_every_connection() {
+    let env = Env::new("window");
+    let _service = env.daemon();
+    let (mut window, mut hub) = (env.connect(), env.connect());
+    hub.hello();
+    window
+        .call("config.set", json!({ "interval_ms": 500 }))
+        .unwrap();
+    let changed = hub.notes("changed", Duration::from_millis(500));
+    assert_eq!(changed.len(), 1);
+    assert_eq!(changed[0]["values"]["interval_ms"], 500);
+    assert_eq!(window.notes("changed", Duration::from_millis(300)).len(), 1);
+    // A change outside the schema sends no `changed`.
+    window
+        .call("config.set", json!({ "stop_shortcut": "F7" }))
+        .unwrap();
+    assert_eq!(hub.notes("changed", Duration::from_millis(300)).len(), 1);
+}
+
+/// Edge case 8: `quit` answers, ends the service and removes the socket.
+#[test]
+fn quit_removes_the_socket() {
+    let env = Env::new("quit");
+    let mut service = env.daemon();
+    let mut c = env.connect();
+    c.hello();
+    assert_eq!(c.call("quit", json!({})).unwrap(), true);
+    assert!(service.exits_within(Duration::from_secs(3)));
+    assert!(!env.socket().exists());
+}
+
+/// Edge case 9: a line over 1 MiB, or one that is not a JSON object, closes
+/// only that connection.
+#[test]
+fn invalid_lines_close_only_their_connection() {
+    let env = Env::new("invalid");
+    let _service = env.daemon();
+    let mut other = env.connect();
+    other.hello();
+    for line in [
+        format!(
+            "{{\"id\":1,\"method\":\"status\",\"params\":\"{}\"}}",
+            "x".repeat(1 << 20)
+        ),
+        "[1, 2]".to_string(),
+        "not json".to_string(),
+    ] {
+        let mut bad = env.connect();
+        let _ = bad.stream.write_all(format!("{line}\n").as_bytes());
         loop {
-            let msg = rx
-                .recv_timeout(Duration::from_secs(5))
-                .expect("no message from tuxhub mode");
-            if pred(&msg) {
-                return msg;
+            match bad.try_read() {
+                // Notifications may arrive before the connection closes.
+                Some(msg) if msg.get("id").is_none() => continue,
+                Some(msg) => panic!("answered {msg}"),
+                None => break,
             }
-            seen.push(msg);
         }
-    };
+    }
+    assert_eq!(
+        other.call("get", json!({})).unwrap()["values"]["mode"],
+        "click"
+    );
+}
 
-    // tuxhub shows the state and registers the hotkeys right away.
-    let status = wait(&|m| m["method"] == "status");
-    assert!(status["params"]["phase"].is_string());
-    let shortcuts = wait(&|m| m["method"] == "shortcuts");
-    assert!(shortcuts["params"].is_array());
-
-    for (id, method) in [(1, "configure"), (2, "config.get"), (3, "macros.list")] {
-        writeln!(
-            stdin,
-            "{}",
-            json!({ "id": id, "method": method, "params": {} })
-        )
+/// Edge case 10: when the live connection of tuxhub, the last client, goes
+/// away, clicking stops at once.
+#[test]
+fn clicking_stops_when_the_live_connection_goes() {
+    let env = Env::new("live-gone");
+    let _service = env.daemon();
+    let mut hub = env.connect();
+    hub.hello();
+    if hub.call("status", Value::Null).unwrap()["phase"] == "error" {
+        eprintln!("no access to /dev/uinput: nothing can click");
+        return;
+    }
+    // A long start delay: the clicker counts down and never clicks.
+    hub.call("set", json!({ "key": "start_delay_s", "value": 30 }))
         .unwrap();
-    }
-    assert_eq!(wait(&|m| m["id"] == 1)["result"], true);
-    assert_eq!(wait(&|m| m["id"] == 2)["result"]["interval_ms"], 100);
-    assert!(wait(&|m| m["id"] == 3)["result"].is_array());
-    assert!(env.socket().exists(), "requests go through the service");
-
-    // tuxhub exits: the process ends, and the service with it.
-    drop(stdin);
-    assert!(proxy.exits_within(Duration::from_secs(3)));
-    let deadline = Instant::now() + Duration::from_secs(6);
-    while env.socket().exists() {
-        assert!(Instant::now() < deadline, "the service keeps running");
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    assert_eq!(hub.call("action", json!({ "id": "toggle" })).unwrap(), true);
+    drop(hub);
+    // Back within the idle time: the service still runs, the clicker does not.
+    std::thread::sleep(Duration::from_millis(300));
+    let mut window = env.connect();
+    let status = window.call("status", Value::Null).unwrap();
+    assert_eq!(status["running"], false, "{status}");
+    assert_ne!(status["phase"], "countdown");
 }
 
 fn copy_dir(from: &Path, to: &Path) {

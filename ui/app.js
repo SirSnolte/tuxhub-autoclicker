@@ -775,5 +775,16 @@ if (tuxhub.standalone) {
   // Global hotkeys come from tuxhub.
   $("clicker-hotkeys").dataset.i18n = "clicker.hotkeysStandalone";
 }
+// The live connection of tuxhub ended (service quit or restarted after an
+// update): connect again, which starts the service.
+tuxhub.on("closed", () => {
+  showClickerStatus(null);
+  setTimeout(() => {
+    loadSettings();
+    loadMacros();
+    tuxhub.call("status").then(showClickerStatus).catch(fail);
+  }, 1000);
+});
+
 applyStaticTexts();
 loadMacros();
