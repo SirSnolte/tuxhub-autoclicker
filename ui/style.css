@@ -100,7 +100,7 @@ table {
 th,
 td {
   text-align: left;
-  padding: var(--wa-space-xs) var(--wa-space-m);
+  padding: var(--wa-space-xs);
   vertical-align: middle;
 }
 th {
