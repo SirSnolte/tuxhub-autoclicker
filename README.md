@@ -1,12 +1,20 @@
-# tuxhub-autoclicker
+<p align="center">
+  <img src="assets/icon.svg" width="96" height="96" alt="Autoclicker icon">
+</p>
 
-Autoclicker and keyboard and mouse macros for Linux. Clicks and macro playback
-use a virtual input device (`/dev/uinput`), so they work on Wayland and X11
-and in every application.
+<h1 align="center">Autoclicker</h1>
 
-The tool works on its own, with its own window and from the command line,
-and integrates with [tuxhub](https://github.com/SirSnolte/tuxhub), which
-shows the same interface and adds global hotkeys.
+<p align="center">
+  Autoclicker and keyboard and mouse macros for Linux.
+</p>
+
+Clicks and macro playback use a virtual input device (`/dev/uinput`), so they
+work on Wayland and X11 and in every application.
+
+Autoclicker is part of the [tuxhub](https://github.com/SirSnolte/tuxhub)
+family of gaming tools for Linux. It works on its own, with its own window and
+from the command line, and integrates with tuxhub, which shows the same
+interface and adds global hotkeys.
 
 > Automated input can violate the terms of service of online games, in
 > particular games with anti-cheat software. Use it at your own risk.
@@ -24,7 +32,15 @@ shows the same interface and adds global hotkeys.
 
 ## Installation
 
-Install it from the workshop in tuxhub (version 0.7.0 or newer), or download the archive from the
+### With tuxhub
+
+Install Autoclicker from the workshop in tuxhub (version 0.7.0 or newer).
+tuxhub takes care of updates, starts the background service when needed and
+shows the interface on its own page.
+
+### Without tuxhub
+
+Download the archive from the
 [latest release](https://github.com/SirSnolte/tuxhub-autoclicker/releases/latest),
 extract it and run:
 
@@ -37,7 +53,9 @@ the application menu and links the command to `~/.local/bin`. tuxhub detects
 this installation and updates it in place. `tuxhub-autoclicker uninstall`
 removes it again; `--purge` also removes the settings and the macros.
 
-## Window and background service
+## Usage
+
+### Window and background service
 
 `tuxhub-autoclicker` without arguments opens the window. It shows the same
 interface as tuxhub. Settings, the virtual input devices and the macros
@@ -49,7 +67,7 @@ When the last window or tuxhub closes, the service stops clicking, playback
 and recording at once and exits. Global hotkeys are registered by tuxhub, so
 they work while tuxhub is running.
 
-### Permissions
+#### Permissions
 
 Creating virtual input devices requires write access to `/dev/uinput`. Many
 systems grant it already, for example when Steam is installed. Otherwise run:
@@ -71,7 +89,7 @@ sudo usermod -aG input "$USER"   # log out and in again afterwards
 Input devices are read only while a recording is active. Every key is stored
 during a recording, so do not type passwords while recording.
 
-## Command line
+### Command line
 
 ```bash
 tuxhub-autoclicker click --interval 100 --button left --delay 3
