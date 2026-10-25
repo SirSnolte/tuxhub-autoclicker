@@ -1,4 +1,4 @@
-# Integration with tuxhub (level 3, live interface; requires tuxhub 0.6.0 or
+# Integration with tuxhub (level 3, live interface; requires tuxhub 0.7.0 or
 # newer). See https://github.com/SirSnolte/tuxhub
 #
 # The settings live in the tool's own background service, so tuxhub and the
