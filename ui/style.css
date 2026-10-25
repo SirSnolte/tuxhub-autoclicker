@@ -103,6 +103,15 @@ td {
   padding: var(--wa-space-xs);
   vertical-align: middle;
 }
+/* The table has no card padding, so its outer cells bring it. */
+th:first-child,
+td:first-child {
+  padding-inline-start: var(--tuxhub-card-padding);
+}
+th:last-child,
+td:last-child {
+  padding-inline-end: var(--tuxhub-card-padding);
+}
 th {
   font-size: var(--wa-font-size-xs);
   font-weight: var(--wa-font-weight-semibold);
